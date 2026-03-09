@@ -11,9 +11,6 @@ import {
   WeekdayPattern,
   EquiUser,
   PlanningStyle,
-  ActivityType,
-  ActivitySlot,
-  FlexibleQuota,
 } from "../types";
 
 // ============================================================================
@@ -736,9 +733,6 @@ function Step3Rhythms({ formData, updateFormData, onNext, onBack }: Step3Rhythms
 // STEP 4: FIXED STRUCTURES
 // ============================================================================
 
-type ActivityType = "strictlyFixed" | "flexibleFloating";
-type PreferredTimeSlot = "focusPeaks" | "anytime";
-
 interface ActivitySlot {
   day: Weekday;
   startHour: number;
@@ -747,13 +741,13 @@ interface ActivitySlot {
 
 interface FlexibleQuota {
   dailyMinutes: number;
-  preferredSlot: PreferredTimeSlot;
+  preferredSlot: "focusPeaks" | "anytime";
 }
 
 interface ActivityForm {
   label: string;
   category: CognitiveCategory;
-  activityType: ActivityType;
+  activityType: "strictlyFixed" | "flexibleFloating";
   weekdayPattern: Weekday[];
   slots: ActivitySlot[];
   flexibleQuota?: FlexibleQuota;
