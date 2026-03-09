@@ -95,7 +95,7 @@ If no schedule data is found, return an empty array [].`;
       const errorText = await response.text();
       console.error("Gemini API error:", response.status, errorText);
       return NextResponse.json(
-        { error: `Gemini API error: ${response.status}` },
+        { error: `Gemini API error: ${response.status}`, details: errorText },
         { status: 500 }
       );
     }

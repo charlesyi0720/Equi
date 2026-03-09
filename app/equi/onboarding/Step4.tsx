@@ -186,7 +186,8 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
       }
     } catch (error) {
       console.error("Vision processing error:", error);
-      alert("Failed to process image. Please use manual entry.");
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      alert(`Failed to process image: ${errorMessage}. Please use manual entry.`);
     } finally {
       setIsAnalyzing(false);
     }
