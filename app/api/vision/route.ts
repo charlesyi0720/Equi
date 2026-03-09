@@ -25,7 +25,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { Weekday, CognitiveCategory } from "../../../equi/types";
+import { Weekday, CognitiveCategory } from "../../equi/types";
 
 export interface VisionParsedActivity {
   id: string;
