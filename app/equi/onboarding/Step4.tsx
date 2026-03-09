@@ -25,11 +25,6 @@ const CATEGORY_OPTIONS: { value: CognitiveCategory; label: string }[] = [
   { value: "Recovery", label: "Recovery / Rest" },
 ];
 
-function generateId(): string {
-  return Math.random().toString(36).substring(2, 11);
-}
-
-// ============================================================================
 // STEP 4: FIXED STRUCTURES - Complete Rewrite
 // ============================================================================
 
