@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AgentPersona,
@@ -778,6 +778,106 @@ const PATTERN_OPTIONS: { value: string; label: string }[] = [
 ];
 
 function Step4Structures({ formData, updateFormData, onNext, onBack }: Step4StructuresProps) {
+  const [importMethod, setImportMethod] = React.useState<"file" | "google" | "manual" | null>(null);
+  const [isUploading, setIsUploading] = React.useState(false);
+  const [isSyncing, setIsSyncing] = React.useState(false);
+  const [importedSchedules, setImportedSchedules] = React.useState<ImportedSchedule[]>([]);
+  const [showConfirm, setShowConfirm] = React.useState(false);
+  const [dragActive, setDragActive] = React.useState(false);
+
+  interface ImportedSchedule {
+    id: string;
+    label: string;
+    day: Weekday;
+    startHour: number;
+    endHour: number;
+    category: CognitiveCategory;
+  }
+
+  // Mock AI parsing - simulates extracting schedule from file
+  const mockParseFile = () => {
+    setIsUploading(true);
+    setTimeout(() => {
+      const mockSchedules: ImportedSchedule[] = [
+        { id: "1", label: "Economics 101", day: "Monday", startHour: 10, endHour: 12, category: "DeepWork" },
+        { id: "2", label: "Economics 101", day: "Wednesday", startHour: 10, endHour: 12, category: "DeepWork" },
+        { id: "3", label: "Economics 101", day: "Friday", startHour: 10, endHour: 12, category: "DeepWork" },
+        { id: "4", label: "Linear Algebra", day: "Tuesday", startHour: 14, endHour: 16, category: "DeepWork" },
+        { id: "5", label: "Linear Algebra", day: "Thursday", startHour: 14, endHour: 16, category: "DeepWork" },
+        { id: "6", label: "Research Meeting", day: "Monday", startHour: 16, endHour: 17, category: "Social" },
+        { id: "7", label: "Gym", day: "Tuesday", startHour: 18, endHour: 19, category: "Recovery" },
+        { id: "8", label: "Gym", day: "Thursday", startHour: 18, endHour: 19, category: "Recovery" },
+      ];
+      setImportedSchedules(mockSchedules);
+      setIsUploading(false);
+      setShowConfirm(true);
+    }, 2000);
+  };
+
+  // Mock Google Calendar sync
+  const mockGoogleSync = () => {
+    setIsSyncing(true);
+    setTimeout(() => {
+      const mockSchedules: ImportedSchedule[] = [
+        { id: "g1", label: "Team Standup", day: "Monday", startHour: 9, endHour: 10, category: "Social" },
+        { id: "g2", label: "Team Standup", day: "Wednesday", startHour: 9, endHour: 10, category: "Social" },
+        { id: "g3", label: "Team Standup", day: "Friday", startHour: 9, endHour: 10, category: "Social" },
+        { id: "g4", label: "1:1 with Manager", day: "Tuesday", startHour: 11, endHour: 11, category: "Social" },
+        { id: "g5", label: "Deep Work Block", day: "Monday", startHour: 13, endHour: 16, category: "DeepWork" },
+        { id: "g6", label: "Deep Work Block", day: "Wednesday", startHour: 13, endHour: 16, category: "DeepWork" },
+      ];
+      setImportedSchedules(mockSchedules);
+      setIsSyncing(false);
+      setShowConfirm(true);
+    }, 2500);
+  };
+
+  const confirmImport = () => {
+    // Convert imported schedules to activities
+    const activityMap = new Map<string, ActivityForm>();
+    
+    importedSchedules.forEach((schedule) => {
+      const key = schedule.label;
+      if (!activityMap.has(key)) {
+        activityMap.set(key, {
+          label: schedule.label,
+          category: schedule.category,
+          activityType: "strictlyFixed",
+          weekdayPattern: [],
+          slots: [],
+          isHardConstraint: true,
+        });
+      }
+      const activity = activityMap.get(key)!;
+      activity.weekdayPattern.push(schedule.day);
+      activity.slots.push({
+        day: schedule.day,
+        startHour: schedule.startHour,
+        endHour: schedule.endHour,
+      });
+    });
+
+    updateFormData({ fixedActivities: Array.from(activityMap.values()) });
+    setShowConfirm(false);
+    setImportMethod(null);
+    setImportedSchedules([]);
+  };
+
+  const handleFileUpload = (file: File) => {
+    if (file && (file.type.startsWith("image/") || file.type === "application/pdf")) {
+      mockParseFile();
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileUpload(e.dataTransfer.files[0]);
+    }
+  };
+
+  // Manual entry functions
   const addActivity = () => {
     updateFormData({
       fixedActivities: [
@@ -826,14 +926,6 @@ function Step4Structures({ formData, updateFormData, onNext, onBack }: Step4Stru
     updateActivity(activityIndex, "slots", updatedSlots);
   };
 
-  const toggleDay = (activityIndex: number, day: Weekday) => {
-    const activity = formData.fixedActivities[activityIndex];
-    const newPattern = activity.weekdayPattern.includes(day)
-      ? activity.weekdayPattern.filter((d) => d !== day)
-      : [...activity.weekdayPattern, day];
-    updateActivity(activityIndex, "weekdayPattern", newPattern);
-  };
-
   const parsePattern = (value: string): Weekday[] => {
     switch (value) {
       case "Everyday":
@@ -856,6 +948,246 @@ function Step4Structures({ formData, updateFormData, onNext, onBack }: Step4Stru
       return true;
     });
 
+  // Show confirmation page after import
+  if (showConfirm) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        className="space-y-8"
+      >
+        <div className="space-y-2">
+          <h2 className="text-3xl font-light text-[#111] tracking-tight">Review imported schedule</h2>
+          <p className="text-[#666] text-sm">Confirm or adjust before adding to your structure</p>
+        </div>
+
+        <div className="space-y-3">
+          {importedSchedules.map((schedule) => (
+            <div
+              key={schedule.id}
+              className="flex items-center justify-between p-4 border border-[#111]"
+            >
+              <div>
+                <div className="font-medium">{schedule.label}</div>
+                <div className="text-xs text-[#666]">
+                  {schedule.day} {schedule.startHour}:00 - {schedule.endHour}:00
+                </div>
+              </div>
+              <span className="text-xs text-[#999] uppercase">{schedule.category}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex gap-4">
+          <button
+            onClick={() => {
+              setShowConfirm(false);
+              setImportMethod(null);
+              setImportedSchedules([]);
+            }}
+            className="px-8 py-4 text-sm uppercase tracking-widest border border-[#ddd] hover:border-[#111] transition-all"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={confirmImport}
+            className="px-8 py-4 text-sm uppercase tracking-widest bg-[#111] text-[#fff] hover:bg-[#333] transition-all"
+          >
+            Confirm All
+          </button>
+        </div>
+      </motion.div>
+    );
+  }
+
+  // Show import options if no activities yet
+  if (!importMethod && formData.fixedActivities.length === 0) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        className="space-y-10"
+      >
+        <div className="space-y-2">
+          <h2 className="text-3xl font-light text-[#111] tracking-tight">Import your schedule</h2>
+          <p className="text-[#666] text-sm">Choose how you'd like to set up your fixed activities</p>
+        </div>
+
+        <div className="grid gap-4">
+          {/* Option A: Smart File Analysis */}
+          <button
+            onClick={() => setImportMethod("file")}
+            className="p-6 border border-[#111] text-left hover:bg-[#fafafa] transition-all"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-[#111] text-[#fff] flex items-center justify-center text-xl">
+                ⟋
+              </div>
+              <div>
+                <div className="font-medium text-lg">Smart File Analysis</div>
+                <div className="text-xs text-[#666]">Upload schedule image, PDF, or iCal file</div>
+              </div>
+            </div>
+          </button>
+
+          {/* Option B: Google Calendar */}
+          <button
+            onClick={() => setImportMethod("google")}
+            className="p-6 border border-[#ddd] text-left hover:border-[#111] transition-all"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-[#fff] border border-[#ddd] flex items-center justify-center text-xl">
+                G
+              </div>
+              <div>
+                <div className="font-medium text-lg">Connect Google Calendar</div>
+                <div className="text-xs text-[#666]">Sync your existing events</div>
+              </div>
+            </div>
+          </button>
+
+          {/* Option C: Manual Entry */}
+          <button
+            onClick={() => setImportMethod("manual")}
+            className="p-6 border border-[#ddd] text-left hover:border-[#111] transition-all"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-[#fff] border border-[#ddd] flex items-center justify-center text-xl">
+                +
+              </div>
+              <div>
+                <div className="font-medium text-lg">Manual Entry</div>
+                <div className="text-xs text-[#666]">Add activities one by one</div>
+              </div>
+            </div>
+          </button>
+        </div>
+
+        <div className="flex gap-4">
+          <button
+            onClick={onBack}
+            className="px-8 py-4 text-sm uppercase tracking-widest border border-[#ddd] hover:border-[#111] transition-all"
+          >
+            Back
+          </button>
+        </div>
+      </motion.div>
+    );
+  }
+
+  // File upload UI
+  if (importMethod === "file") {
+    return (
+      <motion.div
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        className="space-y-8"
+      >
+        <div className="space-y-2">
+          <h2 className="text-3xl font-light text-[#111] tracking-tight">Upload schedule file</h2>
+          <p className="text-[#666] text-sm">Upload an image, PDF, or iCal file</p>
+        </div>
+
+        <div
+          onDragEnter={(e) => { e.preventDefault(); setDragActive(true); }}
+          onDragLeave={(e) => { e.preventDefault(); setDragActive(false); }}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleDrop}
+          className={`border-2 border-dashed p-12 text-center transition-all ${
+            dragActive ? "border-[#111] bg-[#fafafa]" : "border-[#ddd]"
+          }`}
+        >
+          {isUploading ? (
+            <div className="space-y-4">
+              <div className="text-4xl">⟳</div>
+              <div className="text-[#111]">Analyzing file with AI...</div>
+              <div className="text-xs text-[#666]">Extracting schedule information</div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="text-4xl">📄</div>
+              <div className="text-[#111]">Drag & drop your file here</div>
+              <div className="text-xs text-[#666]">or click to browse</div>
+              <input
+                type="file"
+                accept="image/*,.pdf,.ics"
+                onChange={(e) => e.target.files && handleFileUpload(e.target.files[0])}
+                className="hidden"
+                id="file-upload"
+              />
+              <label
+                htmlFor="file-upload"
+                className="inline-block px-6 py-3 border border-[#111] text-xs uppercase tracking-widest cursor-pointer hover:bg-[#111] hover:text-[#fff] transition-all"
+              >
+                Choose File
+              </label>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-4">
+          <button
+            onClick={() => setImportMethod(null)}
+            className="px-8 py-4 text-sm uppercase tracking-widest border border-[#ddd] hover:border-[#111] transition-all"
+          >
+            Back
+          </button>
+        </div>
+      </motion.div>
+    );
+  }
+
+  // Google Calendar sync UI
+  if (importMethod === "google") {
+    return (
+      <motion.div
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        className="space-y-8"
+      >
+        <div className="space-y-2">
+          <h2 className="text-3xl font-light text-[#111] tracking-tight">Connect Google Calendar</h2>
+          <p className="text-[#666] text-sm">Sync your events from Google Calendar</p>
+        </div>
+
+        <div className="p-8 border border-[#ddd] text-center">
+          {isSyncing ? (
+            <div className="space-y-4">
+              <div className="text-4xl">🔄</div>
+              <div className="text-[#111]">Authorizing and syncing...</div>
+              <div className="text-xs text-[#666]">This may take a few seconds</div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="text-4xl">G</div>
+              <div className="text-[#111]">Click to connect</div>
+              <button
+                onClick={mockGoogleSync}
+                className="px-8 py-3 bg-[#111] text-[#fff] text-sm uppercase tracking-widest hover:bg-[#333] transition-all"
+              >
+                Connect Google Calendar
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-4">
+          <button
+            onClick={() => setImportMethod(null)}
+            className="px-8 py-4 text-sm uppercase tracking-widest border border-[#ddd] hover:border-[#111] transition-all"
+          >
+            Back
+          </button>
+        </div>
+      </motion.div>
+    );
+  }
+
+  // Manual entry UI (existing)
   return (
     <motion.div
       initial={{ opacity: 0, x: 20 }}
