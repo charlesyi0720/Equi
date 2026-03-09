@@ -45,6 +45,8 @@ interface ImportedSchedule {
   day: Weekday;
   startHour: number;
   endHour: number;
+  startMinute: number;
+  endMinute: number;
   category: CognitiveCategory;
 }
 
@@ -67,7 +69,7 @@ function TimeSlotSelector({
 }: {
   slot: ActivitySlot;
   day: Weekday;
-  onUpdate: (field: "startHour" | "endHour", value: number) => void;
+  onUpdate: (field: "startHour" | "endHour" | "startMinute" | "endMinute", value: number) => void;
   onRemove: () => void;
 }) {
   return (
@@ -80,11 +82,23 @@ function TimeSlotSelector({
       >
         {Array.from({ length: 24 }, (_, i) => (
           <option key={i} value={i}>
-            {i.toString().padStart(2, "0")}:00
+            {i.toString().padStart(2, "0")}
           </option>
         ))}
       </select>
-      <span className="text-xs text-[#666]">to</span>
+      <span className="text-xs text-[#666]">:</span>
+      <select
+        value={slot.startMinute ?? 0}
+        onChange={(e) => onUpdate("startMinute", Number(e.target.value))}
+        className="border-b border-[#ddd] py-1 bg-transparent outline-none text-sm font-mono w-12"
+      >
+        {Array.from({ length: 60 }, (_, i) => (
+          <option key={i} value={i}>
+            {i.toString().padStart(2, "0")}
+          </option>
+        ))}
+      </select>
+      <span className="text-xs text-[#666]">→</span>
       <select
         value={slot.endHour}
         onChange={(e) => onUpdate("endHour", Number(e.target.value))}
@@ -92,7 +106,19 @@ function TimeSlotSelector({
       >
         {Array.from({ length: 24 }, (_, i) => (
           <option key={i} value={i}>
-            {i.toString().padStart(2, "0")}:00
+            {i.toString().padStart(2, "0")}
+          </option>
+        ))}
+      </select>
+      <span className="text-xs text-[#666]">:</span>
+      <select
+        value={slot.endMinute ?? 0}
+        onChange={(e) => onUpdate("endMinute", Number(e.target.value))}
+        className="border-b border-[#ddd] py-1 bg-transparent outline-none text-sm font-mono w-12"
+      >
+        {Array.from({ length: 60 }, (_, i) => (
+          <option key={i} value={i}>
+            {i.toString().padStart(2, "0")}
           </option>
         ))}
       </select>
@@ -139,6 +165,8 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
         day: e.day,
         startHour: e.startHour,
         endHour: e.endHour,
+        startMinute: e.startMinute,
+        endMinute: e.endMinute,
         category: e.category,
       }));
 
@@ -265,6 +293,8 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
         day: schedule.day,
         startHour: schedule.startHour,
         endHour: schedule.endHour,
+        startMinute: schedule.startMinute,
+        endMinute: schedule.endMinute,
       });
     });
 
@@ -306,7 +336,7 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
 
   const addSlot = (activityIndex: number, day: Weekday) => {
     const activity = formData.fixedActivities[activityIndex];
-    const newSlot: ActivitySlot = { day, startHour: 9, endHour: 10 };
+    const newSlot: ActivitySlot = { day, startHour: 9, endHour: 10, startMinute: 0, endMinute: 0 };
     updateActivity(activityIndex, "slots", [...activity.slots, newSlot]);
   };
 
@@ -315,7 +345,7 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
     updateActivity(activityIndex, "slots", activity.slots.filter((s) => s.day !== day));
   };
 
-  const updateSlot = (activityIndex: number, day: Weekday, field: "startHour" | "endHour", value: number) => {
+  const updateSlot = (activityIndex: number, day: Weekday, field: "startHour" | "endHour" | "startMinute" | "endMinute", value: number) => {
     const activity = formData.fixedActivities[activityIndex];
     const updatedSlots = activity.slots.map((s) =>
       s.day === day ? { ...s, [field]: value } : s
@@ -355,53 +385,42 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
           </div>
         ) : (
           <div className="space-y-3 max-h-[50vh] overflow-y-auto">
-            {importedSchedules.map((schedule) => (
-              <div
-                key={schedule.id}
-                className="flex items-center gap-3 p-4 border border-[#111]"
-              >
-                <input
-                  type="text"
-                  value={schedule.label}
-                  onChange={(e) => updateImportedSchedule(schedule.id, "label", e.target.value)}
-                  className="flex-1 border-b border-[#ddd] py-1 bg-transparent outline-none focus:border-[#111] text-sm"
-                />
-                <select
-                  value={schedule.day}
-                  onChange={(e) => updateImportedSchedule(schedule.id, "day", e.target.value as Weekday)}
-                  className="border-b border-[#ddd] py-1 bg-transparent outline-none text-sm"
+            {importedSchedules.map((schedule) => {
+              const startTimeStr = `${schedule.startHour.toString().padStart(2, '0')}:${schedule.startMinute.toString().padStart(2, '0')}`;
+              const endTimeStr = `${schedule.endHour.toString().padStart(2, '0')}:${schedule.endMinute.toString().padStart(2, '0')}`;
+              
+              return (
+                <div
+                  key={schedule.id}
+                  className="flex items-center gap-3 p-4 border border-[#111]"
                 >
-                  {WEEKDAYS.map((d) => (
-                    <option key={d} value={d}>{d.slice(0, 2)}</option>
-                  ))}
-                </select>
-                <select
-                  value={schedule.startHour}
-                  onChange={(e) => updateImportedSchedule(schedule.id, "startHour", Number(e.target.value))}
-                  className="border-b border-[#ddd] py-1 bg-transparent outline-none text-sm font-mono w-16"
-                >
-                  {Array.from({ length: 24 }, (_, i) => (
-                    <option key={i} value={i}>{i.toString().padStart(2, "0")}:00</option>
-                  ))}
-                </select>
-                <span className="text-xs text-[#666]">→</span>
-                <select
-                  value={schedule.endHour}
-                  onChange={(e) => updateImportedSchedule(schedule.id, "endHour", Number(e.target.value))}
-                  className="border-b border-[#ddd] py-1 bg-transparent outline-none text-sm font-mono w-16"
-                >
-                  {Array.from({ length: 24 }, (_, i) => (
-                    <option key={i} value={i}>{i.toString().padStart(2, "0")}:00</option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => removeImportedSchedule(schedule.id)}
-                  className="text-lg text-[#666] hover:text-[#111] ml-2"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
+                  <input
+                    type="text"
+                    value={schedule.label}
+                    onChange={(e) => updateImportedSchedule(schedule.id, "label", e.target.value)}
+                    className="flex-1 border-b border-[#ddd] py-1 bg-transparent outline-none focus:border-[#111] text-sm"
+                  />
+                  <select
+                    value={schedule.day}
+                    onChange={(e) => updateImportedSchedule(schedule.id, "day", e.target.value as Weekday)}
+                    className="border-b border-[#ddd] py-1 bg-transparent outline-none text-sm"
+                  >
+                    {WEEKDAYS.map((d) => (
+                      <option key={d} value={d}>{d.slice(0, 2)}</option>
+                    ))}
+                  </select>
+                  <span className="text-sm font-mono text-[#666]">{startTimeStr}</span>
+                  <span className="text-xs text-[#666]">→</span>
+                  <span className="text-sm font-mono text-[#666]">{endTimeStr}</span>
+                  <button
+                    onClick={() => removeImportedSchedule(schedule.id)}
+                    className="text-lg text-[#666] hover:text-[#111] ml-2"
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
 

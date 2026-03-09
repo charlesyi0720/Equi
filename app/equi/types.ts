@@ -59,6 +59,8 @@ export interface ActivitySlot {
   day: Weekday;
   startHour: number;
   endHour: number;
+  startMinute?: number;
+  endMinute?: number;
 }
 
 export interface FlexibleQuota {
