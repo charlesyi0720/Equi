@@ -51,6 +51,21 @@ export type CognitiveCategory =
 
 export type WeekdayPattern = Weekday[] | "Everyday" | "Weekdays" | "Weekends";
 
+export type ActivityType = "strictlyFixed" | "flexibleFloating";
+
+export type PreferredTimeSlot = "focusPeaks" | "anytime";
+
+export interface ActivitySlot {
+  day: Weekday;
+  startHour: number;
+  endHour: number;
+}
+
+export interface FlexibleQuota {
+  dailyMinutes: number;
+  preferredSlot: PreferredTimeSlot;
+}
+
 // ============================================================================
 // TIME REPRESENTATION
 // ============================================================================
@@ -118,9 +133,10 @@ export interface FixedActivity {
   id: string;
   label: string;
   category: CognitiveCategory;
+  activityType: ActivityType;
   weekdayPattern: WeekdayPattern;
-  start: TimeOfDay;
-  durationMinutes: number;
+  slots: ActivitySlot[];
+  flexibleQuota?: FlexibleQuota;
   isHardConstraint: boolean;
   location?: string;
   notes?: string;
@@ -217,9 +233,10 @@ export interface OnboardingFormData {
   fixedActivities: Array<{
     label: string;
     category: CognitiveCategory;
+    activityType: ActivityType;
     weekdayPattern: WeekdayPattern;
-    startHour: number;
-    durationMinutes: number;
+    slots: ActivitySlot[];
+    flexibleQuota?: FlexibleQuota;
     isHardConstraint: boolean;
   }>;
   

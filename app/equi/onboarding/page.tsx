@@ -11,6 +11,9 @@ import {
   WeekdayPattern,
   EquiUser,
   PlanningStyle,
+  ActivityType,
+  ActivitySlot,
+  FlexibleQuota,
 } from "../types";
 
 // ============================================================================
@@ -62,9 +65,10 @@ export default function EquiOnboarding() {
     fixedActivities: [] as {
       label: string;
       category: CognitiveCategory;
-      weekdayPattern: WeekdayPattern;
-      startHour: number;
-      durationMinutes: number;
+      activityType: "strictlyFixed" | "flexibleFloating";
+      weekdayPattern: Weekday[];
+      slots: { day: Weekday; startHour: number; endHour: number }[];
+      flexibleQuota?: { dailyMinutes: number; preferredSlot: "focusPeaks" | "anytime" };
       isHardConstraint: boolean;
     }[],
     lifeMode: LifeMode.Normal,
@@ -127,15 +131,30 @@ export default function EquiOnboarding() {
         },
       },
       lifeStructure: {
-        fixedActivities: formData.fixedActivities.map((activity) => ({
-          id: generateId(),
-          label: activity.label,
-          category: activity.category,
-          weekdayPattern: activity.weekdayPattern,
-          start: { hour: activity.startHour, minute: 0 },
-          durationMinutes: activity.durationMinutes,
-          isHardConstraint: activity.isHardConstraint,
-        })),
+        fixedActivities: formData.fixedActivities.map((activity) => {
+          if (activity.activityType === "strictlyFixed") {
+            return {
+              id: generateId(),
+              label: activity.label,
+              category: activity.category,
+              activityType: activity.activityType,
+              weekdayPattern: activity.weekdayPattern.length > 0 ? activity.weekdayPattern : "Everyday",
+              slots: activity.slots,
+              isHardConstraint: activity.isHardConstraint,
+            };
+          } else {
+            return {
+              id: generateId(),
+              label: activity.label,
+              category: activity.category,
+              activityType: activity.activityType,
+              weekdayPattern: activity.weekdayPattern.length > 0 ? activity.weekdayPattern : "Everyday",
+              slots: [],
+              flexibleQuota: activity.flexibleQuota,
+              isHardConstraint: activity.isHardConstraint,
+            };
+          }
+        }),
         cognitiveLoadModel: [
           { category: "DeepWork", weight: 9, description: "Most demanding" },
           { category: "Creative", weight: 7, description: "High cognitive demand" },
@@ -717,12 +736,27 @@ function Step3Rhythms({ formData, updateFormData, onNext, onBack }: Step3Rhythms
 // STEP 4: FIXED STRUCTURES
 // ============================================================================
 
+type ActivityType = "strictlyFixed" | "flexibleFloating";
+type PreferredTimeSlot = "focusPeaks" | "anytime";
+
+interface ActivitySlot {
+  day: Weekday;
+  startHour: number;
+  endHour: number;
+}
+
+interface FlexibleQuota {
+  dailyMinutes: number;
+  preferredSlot: PreferredTimeSlot;
+}
+
 interface ActivityForm {
   label: string;
   category: CognitiveCategory;
-  weekdayPattern: WeekdayPattern;
-  startHour: number;
-  durationMinutes: number;
+  activityType: ActivityType;
+  weekdayPattern: Weekday[];
+  slots: ActivitySlot[];
+  flexibleQuota?: FlexibleQuota;
   isHardConstraint: boolean;
 }
 
@@ -744,10 +778,9 @@ const CATEGORY_OPTIONS: { value: CognitiveCategory; label: string }[] = [
 
 const PATTERN_OPTIONS: { value: string; label: string }[] = [
   { value: "Everyday", label: "Every Day" },
-  { value: "Weekdays", label: "Weekdays" },
+  { value: "Weekdays", label: "Weekdays (Mon-Fri)" },
   { value: "Weekends", label: "Weekends" },
-  { value: "MWF", label: "MWF" },
-  { value: "TTh", label: "TTh" },
+  { value: "Custom", label: "Custom Days" },
 ];
 
 function Step4Structures({ formData, updateFormData, onNext, onBack }: Step4StructuresProps) {
@@ -755,12 +788,19 @@ function Step4Structures({ formData, updateFormData, onNext, onBack }: Step4Stru
     updateFormData({
       fixedActivities: [
         ...formData.fixedActivities,
-        { label: "", category: "DeepWork", weekdayPattern: "Weekdays", startHour: 9, durationMinutes: 60, isHardConstraint: false },
+        {
+          label: "",
+          category: "DeepWork",
+          activityType: "strictlyFixed",
+          weekdayPattern: [],
+          slots: [],
+          isHardConstraint: false,
+        },
       ],
     });
   };
 
-  const updateActivity = (index: number, field: keyof ActivityForm, value: string | number | boolean | WeekdayPattern | CognitiveCategory) => {
+  const updateActivity = (index: number, field: keyof ActivityForm, value: unknown) => {
     const updated = [...formData.fixedActivities];
     updated[index] = { ...updated[index], [field]: value };
     updateFormData({ fixedActivities: updated });
@@ -770,16 +810,57 @@ function Step4Structures({ formData, updateFormData, onNext, onBack }: Step4Stru
     updateFormData({ fixedActivities: formData.fixedActivities.filter((_, i) => i !== index) });
   };
 
-  const isValid = formData.fixedActivities.length > 0 && formData.fixedActivities.every((a) => a.label.trim());
-
-  const parsePattern = (value: string): WeekdayPattern => {
-    if (value === "Everyday" || value === "Weekdays" || value === "Weekends") {
-      return value;
+  const addSlot = (activityIndex: number, day: Weekday) => {
+    const activity = formData.fixedActivities[activityIndex];
+    const existingSlot = activity.slots.find((s) => s.day === day);
+    if (!existingSlot) {
+      const newSlot: ActivitySlot = { day, startHour: 9, endHour: 10 };
+      updateActivity(activityIndex, "slots", [...activity.slots, newSlot]);
     }
-    if (value === "MWF") return ["Monday", "Wednesday", "Friday"];
-    if (value === "TTh") return ["Tuesday", "Thursday"];
-    return "Weekdays";
   };
+
+  const removeSlot = (activityIndex: number, day: Weekday) => {
+    const activity = formData.fixedActivities[activityIndex];
+    updateActivity(activityIndex, "slots", activity.slots.filter((s) => s.day !== day));
+  };
+
+  const updateSlot = (activityIndex: number, day: Weekday, field: "startHour" | "endHour", value: number) => {
+    const activity = formData.fixedActivities[activityIndex];
+    const updatedSlots = activity.slots.map((s) =>
+      s.day === day ? { ...s, [field]: value } : s
+    );
+    updateActivity(activityIndex, "slots", updatedSlots);
+  };
+
+  const toggleDay = (activityIndex: number, day: Weekday) => {
+    const activity = formData.fixedActivities[activityIndex];
+    const newPattern = activity.weekdayPattern.includes(day)
+      ? activity.weekdayPattern.filter((d) => d !== day)
+      : [...activity.weekdayPattern, day];
+    updateActivity(activityIndex, "weekdayPattern", newPattern);
+  };
+
+  const parsePattern = (value: string): Weekday[] => {
+    switch (value) {
+      case "Everyday":
+        return ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+      case "Weekdays":
+        return ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+      case "Weekends":
+        return ["Saturday", "Sunday"];
+      default:
+        return [];
+    }
+  };
+
+  const isValid =
+    formData.fixedActivities.length > 0 &&
+    formData.fixedActivities.every((a) => {
+      if (!a.label.trim()) return false;
+      if (a.activityType === "strictlyFixed" && a.slots.length === 0) return false;
+      if (a.activityType === "flexibleFloating" && (!a.flexibleQuota || a.flexibleQuota.dailyMinutes <= 0)) return false;
+      return true;
+    });
 
   return (
     <motion.div
@@ -790,21 +871,26 @@ function Step4Structures({ formData, updateFormData, onNext, onBack }: Step4Stru
     >
       <div className="space-y-2">
         <h2 className="text-3xl font-light text-[#111] tracking-tight">Define your structure.</h2>
-        <p className="text-[#666] text-sm">What are your non-negotiable blocks?</p>
+        <p className="text-[#666] text-sm">Add fixed commitments and flexible quotas.</p>
       </div>
 
       <div className="space-y-6">
         {formData.fixedActivities.length === 0 && (
-          <p className="text-xs text-[#999] py-4">Add activities like Sleep, Work, Gym</p>
+          <p className="text-xs text-[#999] py-4">Click "+ Add Activity" to begin</p>
         )}
-        
+
         {formData.fixedActivities.map((activity, index) => (
-          <div key={index} className="p-4 border border-[#ddd] space-y-4">
-            <div className="flex justify-between items-center">
+          <div key={index} className="border border-[#111] p-5 space-y-5">
+            <div className="flex justify-between items-start">
               <span className="text-xs uppercase tracking-widest text-[#666]">Activity {index + 1}</span>
-              <button onClick={() => removeActivity(index)} className="text-xs text-[#666] hover:text-[#111]">Remove</button>
+              <button
+                onClick={() => removeActivity(index)}
+                className="text-xs text-[#666] hover:text-[#111]"
+              >
+                Remove
+              </button>
             </div>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-xs text-[#666]">Name</label>
@@ -812,11 +898,11 @@ function Step4Structures({ formData, updateFormData, onNext, onBack }: Step4Stru
                   type="text"
                   value={activity.label}
                   onChange={(e) => updateActivity(index, "label", e.target.value)}
-                  placeholder="e.g., Gym, Research Block"
+                  placeholder="e.g., Economics Class"
                   className="w-full border-b border-[#ddd] py-2 bg-transparent outline-none focus:border-[#111] transition-colors"
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <label className="text-xs text-[#666]">Category</label>
                 <select
@@ -825,78 +911,226 @@ function Step4Structures({ formData, updateFormData, onNext, onBack }: Step4Stru
                   className="w-full border-b border-[#ddd] py-2 bg-transparent outline-none focus:border-[#111] transition-colors"
                 >
                   {CATEGORY_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div className="space-y-2">
-                <label className="text-xs text-[#666]">Days</label>
-                <select
-                  value={Array.isArray(activity.weekdayPattern) 
-                    ? (activity.weekdayPattern.length === 3 && activity.weekdayPattern.includes("Monday") ? "MWF" : 
-                       activity.weekdayPattern.length === 2 ? "TTh" : "Weekdays")
-                    : activity.weekdayPattern}
-                  onChange={(e) => updateActivity(index, "weekdayPattern", parsePattern(e.target.value))}
-                  className="w-full border-b border-[#ddd] py-2 bg-transparent outline-none focus:border-[#111] transition-colors"
-                >
-                  {PATTERN_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div className="space-y-2">
-                <label className="text-xs text-[#666]">Start Time</label>
-                <select
-                  value={activity.startHour}
-                  onChange={(e) => updateActivity(index, "startHour", Number(e.target.value))}
-                  className="w-full border-b border-[#ddd] py-2 bg-transparent outline-none focus:border-[#111] transition-colors"
-                >
-                  {Array.from({ length: 24 }, (_, i) => (
-                    <option key={i} value={i}>{i.toString().padStart(2, "0")}:00</option>
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
                   ))}
                 </select>
               </div>
             </div>
-            
-            <div className="flex items-center gap-6">
-              <div className="space-y-2">
-                <label className="text-xs text-[#666]">Duration (min)</label>
-                <select
-                  value={activity.durationMinutes}
-                  onChange={(e) => updateActivity(index, "durationMinutes", Number(e.target.value))}
-                  className="w-full border-b border-[#ddd] py-2 bg-transparent outline-none focus:border-[#111] transition-colors"
-                >
-                  <option value={30}>30 min</option>
-                  <option value={60}>60 min</option>
-                  <option value={90}>90 min</option>
-                  <option value={120}>120 min</option>
-                  <option value={180}>180 min</option>
-                  <option value={240}>240 min</option>
-                  <option value={480}>480 min</option>
-                </select>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => updateActivity(index, "activityType", "strictlyFixed")}
+                className={`flex-1 py-3 text-xs uppercase tracking-widest border transition-all ${
+                  activity.activityType === "strictlyFixed"
+                    ? "border-[#111] bg-[#111] text-[#fff]"
+                    : "border-[#ddd] text-[#666] hover:border-[#111]"
+                }`}
+              >
+                Strictly Fixed
+              </button>
+              <button
+                onClick={() =>
+                  updateActivity(index, "activityType", "flexibleFloating")
+                }
+                className={`flex-1 py-3 text-xs uppercase tracking-widest border transition-all ${
+                  activity.activityType === "flexibleFloating"
+                    ? "border-[#111] bg-[#111] text-[#fff]"
+                    : "border-[#ddd] text-[#666] hover:border-[#111]"
+                }`}
+              >
+                Flexible Floating
+              </button>
+            </div>
+
+            {activity.activityType === "strictlyFixed" && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs text-[#666]">Quick Select Days</label>
+                  <select
+                    value={
+                      activity.weekdayPattern.length === 7
+                        ? "Everyday"
+                        : activity.weekdayPattern.length === 5 &&
+                          !activity.weekdayPattern.includes("Saturday") &&
+                          !activity.weekdayPattern.includes("Sunday")
+                        ? "Weekends"
+                        : activity.weekdayPattern.length === 2 &&
+                          activity.weekdayPattern.includes("Saturday")
+                        ? "Weekends"
+                        : "Custom"
+                    }
+                    onChange={(e) => {
+                      const days = parsePattern(e.target.value);
+                      updateActivity(index, "weekdayPattern", days);
+                      const newSlots: ActivitySlot[] = days.map((day) => ({
+                        day,
+                        startHour: 9,
+                        endHour: 10,
+                      }));
+                      updateActivity(index, "slots", newSlots);
+                    }}
+                    className="w-full border-b border-[#ddd] py-2 bg-transparent outline-none focus:border-[#111] transition-colors"
+                  >
+                    {PATTERN_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-3">
+                  <label className="text-xs text-[#666]">Configure Time Slots</label>
+                  <div className="grid gap-3">
+                    {WEEKDAYS.map((day) => {
+                      const isSelected = activity.slots.some((s) => s.day === day);
+                      const slot = activity.slots.find((s) => s.day === day);
+                      return (
+                        <div
+                          key={day}
+                          className={`flex items-center gap-3 p-3 border transition-all ${
+                            isSelected ? "border-[#111]" : "border-[#ddd]"
+                          }`}
+                        >
+                          <button
+                            onClick={() =>
+                              isSelected ? removeSlot(index, day) : addSlot(index, day)
+                            }
+                            className={`w-12 text-xs font-medium transition-all ${
+                              isSelected
+                                ? "bg-[#111] text-[#fff]"
+                                : "bg-[#fff] border border-[#ddd] text-[#666]"
+                            }`}
+                          >
+                            {day.slice(0, 2)}
+                          </button>
+                          {isSelected && slot && (
+                            <>
+                              <select
+                                value={slot.startHour}
+                                onChange={(e) =>
+                                  updateSlot(index, day, "startHour", Number(e.target.value))
+                                }
+                                className="border-b border-[#ddd] py-1 bg-transparent outline-none text-sm"
+                              >
+                                {Array.from({ length: 24 }, (_, i) => (
+                                  <option key={i} value={i}>
+                                    {i.toString().padStart(2, "0")}:00
+                                  </option>
+                                ))}
+                              </select>
+                              <span className="text-xs text-[#666]">to</span>
+                              <select
+                                value={slot.endHour}
+                                onChange={(e) =>
+                                  updateSlot(index, day, "endHour", Number(e.target.value))
+                                }
+                                className="border-b border-[#ddd] py-1 bg-transparent outline-none text-sm"
+                              >
+                                {Array.from({ length: 24 }, (_, i) => (
+                                  <option key={i} value={i}>
+                                    {i.toString().padStart(2, "0")}:00
+                                  </option>
+                                ))}
+                              </select>
+                            </>
+                          )}
+                          {!isSelected && (
+                            <span className="text-xs text-[#999]">Not scheduled</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
-              
-              <div className="flex items-center gap-3 pt-6">
-                <button
-                  onClick={() => updateActivity(index, "isHardConstraint", !activity.isHardConstraint)}
-                  className={`px-4 py-2 text-xs uppercase tracking-widest border transition-all ${
-                    activity.isHardConstraint
-                      ? "border-[#111] bg-[#111] text-[#fff]"
-                      : "border-[#ddd] text-[#666]"
-                  }`}
-                >
-                  {activity.isHardConstraint ? "Hard Constraint" : "Flexible"}
-                </button>
-                <span className="text-xs text-[#666]">
-                  {activity.isHardConstraint ? "Cannot be moved" : "Can be adjusted"}
-                </span>
+            )}
+
+            {activity.activityType === "flexibleFloating" && (
+              <div className="space-y-4 p-4 bg-[#fafafa]">
+                <div className="space-y-2">
+                  <label className="text-xs text-[#666]">Daily Quota (hours)</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="12"
+                      step="0.5"
+                      value={(activity.flexibleQuota?.dailyMinutes || 60) / 60}
+                      onChange={(e) =>
+                        updateActivity(index, "flexibleQuota", {
+                          dailyMinutes: Number(e.target.value) * 60,
+                          preferredSlot: activity.flexibleQuota?.preferredSlot || "anytime",
+                        })
+                      }
+                      className="flex-1"
+                    />
+                    <span className="text-sm font-mono w-16">
+                      {((activity.flexibleQuota?.dailyMinutes || 60) / 60).toFixed(1)}h
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs text-[#666]">Preferred Time Slot</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() =>
+                        updateActivity(index, "flexibleQuota", {
+                          dailyMinutes: activity.flexibleQuota?.dailyMinutes || 60,
+                          preferredSlot: "focusPeaks",
+                        })
+                      }
+                      className={`flex-1 py-2 text-xs border transition-all ${
+                        activity.flexibleQuota?.preferredSlot === "focusPeaks"
+                          ? "border-[#111] bg-[#111] text-[#fff]"
+                          : "border-[#ddd] text-[#666]"
+                      }`}
+                    >
+                      Focus Peaks
+                    </button>
+                    <button
+                      onClick={() =>
+                        updateActivity(index, "flexibleQuota", {
+                          dailyMinutes: activity.flexibleQuota?.dailyMinutes || 60,
+                          preferredSlot: "anytime",
+                        })
+                      }
+                      className={`flex-1 py-2 text-xs border transition-all ${
+                        activity.flexibleQuota?.preferredSlot === "anytime"
+                          ? "border-[#111] bg-[#111] text-[#fff]"
+                          : "border-[#ddd] text-[#666]"
+                      }`}
+                    >
+                      Anytime
+                    </button>
+                  </div>
+                </div>
               </div>
+            )}
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                onClick={() =>
+                  updateActivity(index, "isHardConstraint", !activity.isHardConstraint)
+                }
+                className={`px-4 py-2 text-xs uppercase tracking-widest border transition-all ${
+                  activity.isHardConstraint
+                    ? "border-[#111] bg-[#111] text-[#fff]"
+                    : "border-[#ddd] text-[#666]"
+                }`}
+              >
+                {activity.isHardConstraint ? "Hard Constraint" : "Flexible"}
+              </button>
+              <span className="text-xs text-[#666]">
+                {activity.isHardConstraint ? "Cannot be moved" : "Can be adjusted"}
+              </span>
             </div>
           </div>
         ))}
-        
+
         <button
           onClick={addActivity}
           className="w-full py-4 border border-dashed border-[#ddd] text-[#666] text-sm hover:border-[#111] hover:text-[#111] transition-all"
@@ -916,8 +1150,8 @@ function Step4Structures({ formData, updateFormData, onNext, onBack }: Step4Stru
           onClick={onNext}
           disabled={!isValid}
           className={`px-8 py-4 text-sm uppercase tracking-widest transition-all ${
-            isValid 
-              ? "bg-[#111] text-[#fff] hover:bg-[#333]" 
+            isValid
+              ? "bg-[#111] text-[#fff] hover:bg-[#333]"
               : "bg-[#eee] text-[#999] cursor-not-allowed"
           }`}
         >
