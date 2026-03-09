@@ -165,7 +165,9 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
       });
 
       if (!response.ok) {
-        throw new Error("Vision API failed");
+        const result = await response.json();
+        const details = result.details || result.error || "Unknown error";
+        throw new Error(`Vision API failed: ${details}`);
       }
 
       const result = await response.json();

@@ -34,6 +34,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.log("File type:", file.type);
+    console.log("File size:", file.size);
+    
     const allowedTypes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
     if (!allowedTypes.includes(file.type)) {
       return NextResponse.json(
@@ -95,7 +98,7 @@ If no schedule data is found, return an empty array [].`;
       const errorText = await response.text();
       console.error("Gemini API error:", response.status, errorText);
       return NextResponse.json(
-        { error: `Gemini API error: ${response.status}`, details: errorText },
+        { error: "Vision API failed", details: errorText },
         { status: 500 }
       );
     }
