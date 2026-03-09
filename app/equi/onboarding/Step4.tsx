@@ -159,14 +159,20 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
       const formDataFile = new FormData();
       formDataFile.append("file", file);
 
-      const response = await fetch("/api/vision", {
-        method: "POST",
-        body: formDataFile,
-      });
+      let response: Response;
+      try {
+        response = await fetch("/api/vision", {
+          method: "POST",
+          body: formDataFile,
+        });
+      } catch (fetchError) {
+        console.error("Fetch error:", fetchError);
+        throw new Error(`Network error: ${fetchError instanceof Error ? fetchError.message : "Failed to connect"}`);
+      }
 
       if (!response.ok) {
-        const result = await response.json();
-        const details = result.details || result.error || "Unknown error";
+        const result = await response.json().catch(() => ({}));
+        const details = result.details || result.error || `HTTP ${response.status}`;
         throw new Error(`Vision API failed: ${details}`);
       }
 
