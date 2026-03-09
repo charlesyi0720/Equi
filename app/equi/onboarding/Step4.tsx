@@ -10,6 +10,10 @@ import {
 } from "../types";
 import { parseICSFile, ParsedEvent } from "../lib/ics-parser";
 
+function generateId(): string {
+  return Math.random().toString(36).substring(2, 11);
+}
+
 const WEEKDAYS: Weekday[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 const CATEGORY_OPTIONS: { value: CognitiveCategory; label: string }[] = [
@@ -30,7 +34,7 @@ function generateId(): string {
 // ============================================================================
 
 interface ActivityForm {
-  id: string;
+  id?: string;
   label: string;
   category: CognitiveCategory;
   activityType: "strictlyFixed" | "flexibleFloating";

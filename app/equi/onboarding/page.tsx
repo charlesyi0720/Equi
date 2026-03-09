@@ -61,6 +61,7 @@ export default function EquiOnboarding() {
     focusPeaks: [] as { startHour: number; endHour: number; days: Weekday[] }[],
     energyDips: [] as { startHour: number; endHour: number; days: Weekday[] }[],
     fixedActivities: [] as {
+      id?: string;
       label: string;
       category: CognitiveCategory;
       activityType: "strictlyFixed" | "flexibleFloating";
