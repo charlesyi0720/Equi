@@ -21,8 +21,8 @@ const staggerContainer = {
   visible: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.15,
-      delayChildren: 0.2,
+      staggerChildren: 0.12,
+      delayChildren: 0.15,
     },
   },
 };
@@ -33,7 +33,7 @@ const staggerContainer = {
 
 export function LandingSection({ onStart }: LandingSectionProps) {
   return (
-    <div className="min-h-screen bg-[#fafafa] text-[#111] font-sans">
+    <div id="landing-section" className="min-h-screen bg-[#fff] text-[#111] font-sans" style={{ transition: 'opacity 300ms ease-out' }}>
       {/* Minimal Header */}
       <header className="absolute top-0 left-0 right-0 p-8">
         <div className="max-w-6xl mx-auto">
@@ -42,7 +42,7 @@ export function LandingSection({ onStart }: LandingSectionProps) {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-6xl mx-auto px-6 pt-32 pb-20">
+      <main className="max-w-6xl mx-auto px-6 pt-40 pb-20">
         <motion.div
           initial="hidden"
           animate="visible"
@@ -50,83 +50,62 @@ export function LandingSection({ onStart }: LandingSectionProps) {
           className="space-y-24"
         >
           {/* Hero Section */}
-          <motion.section variants={fadeInUp} className="space-y-8 max-w-4xl">
-            <h2 className="text-5xl md:text-7xl font-serif font-light tracking-tight leading-[1.1]">
-              Escape the Checklist Treadmill.
+          <motion.section variants={fadeInUp} className="space-y-6 max-w-3xl">
+            <h2 className="text-6xl md:text-8xl font-serif font-light tracking-[0.02em] leading-[1.05]">
+              Beyond the Checklist.
             </h2>
-            <p className="text-xl md:text-2xl font-sans font-light text-[#444] max-w-2xl leading-relaxed">
-              Most tools track your tasks. Equi understands your life. A context-aware decision engine designed to bridge the gap between busyness and meaning.
+            <p className="text-lg md:text-xl font-sans font-light text-[#444] max-w-xl leading-relaxed">
+              Most tools track your time. Equi understands your intent.
             </p>
           </motion.section>
 
-          {/* Problem Cards - Three Pillars */}
-          <motion.section variants={fadeInUp} className="space-y-12">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-[#ddd]">
-              {/* Card 1: Productivity Void */}
-              <motion.article
-                variants={fadeInUp}
-                className="bg-[#fafafa] p-8 md:p-12 space-y-6"
-              >
-                <div className="w-px h-12 bg-[#111]" />
-                <h3 className="text-xs uppercase tracking-[0.2em] text-[#666]">
-                  The Productivity Void
-                </h3>
-                <p className="text-lg font-serif leading-relaxed text-[#333]">
-                  Traditional lists reward checking boxes, not making progress. They offer an illusion of success while leaving behind a sense of emptiness.
-                </p>
-              </motion.article>
+          {/* The Contrast - Simple Grid */}
+          <motion.section variants={fadeInUp}>
+            <div className="space-y-0">
+              {/* Row 1 */}
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center py-6 border-t border-[#ddd]">
+                <div className="text-left">
+                  <span className="text-sm font-medium tracking-wide">Fragmentation</span>
+                </div>
+                <div className="px-6 text-xs text-[#999] uppercase tracking-widest">vs</div>
+                <div className="text-right">
+                  <span className="text-sm font-medium tracking-wide">Synthesis</span>
+                </div>
+              </div>
 
-              {/* Card 2: Contextual Amnesia */}
-              <motion.article
-                variants={fadeInUp}
-                className="bg-[#fafafa] p-8 md:p-12 space-y-6"
-              >
-                <div className="w-px h-12 bg-[#111]" />
-                <h3 className="text-xs uppercase tracking-[0.2em] text-[#666]">
-                  Contextual Amnesia
-                </h3>
-                <p className="text-lg font-serif leading-relaxed text-[#333]">
-                  Current AI assistants treat every prompt as a blank slate. They don't remember your stress, your habits, or your unique cognitive load.
-                </p>
-              </motion.article>
+              {/* Row 2 */}
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center py-6 border-t border-[#ddd]">
+                <div className="text-left">
+                  <span className="text-sm font-medium tracking-wide">Generic Prompts</span>
+                </div>
+                <div className="px-6 text-xs text-[#999] uppercase tracking-widest">vs</div>
+                <div className="text-right">
+                  <span className="text-sm font-medium tracking-wide">Digital Twin</span>
+                </div>
+              </div>
 
-              {/* Card 3: The Digital Twin */}
-              <motion.article
-                variants={fadeInUp}
-                className="bg-[#fafafa] p-8 md:p-12 space-y-6"
-              >
-                <div className="w-px h-12 bg-[#111]" />
-                <h3 className="text-xs uppercase tracking-[0.2em] text-[#666]">
-                  The Digital Twin
-                </h3>
-                <p className="text-lg font-serif leading-relaxed text-[#333]">
-                  Equi builds a persistent model of your persona, biological clock, and long-term goals to achieve Pareto-optimal scheduling.
-                </p>
-              </motion.article>
+              {/* Row 3 */}
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center py-6 border-t border-b border-[#ddd]">
+                <div className="text-left">
+                  <span className="text-sm font-medium tracking-wide">Linear Productivity</span>
+                </div>
+                <div className="px-6 text-xs text-[#999] uppercase tracking-widest">vs</div>
+                <div className="text-right">
+                  <span className="text-sm font-medium tracking-wide">Pareto Optimal</span>
+                </div>
+              </div>
             </div>
           </motion.section>
 
           {/* CTA Section */}
-          <motion.section variants={fadeInUp} className="flex flex-col items-center justify-center space-y-8 py-12">
+          <motion.section variants={fadeInUp} className="flex flex-col items-start py-8">
             <button
               onClick={onStart}
-              className="group relative px-12 py-5 bg-[#111] text-[#fff] text-sm uppercase tracking-[0.15em] transition-all hover:bg-[#333] hover:scale-[1.02]"
+              className="px-10 py-4 bg-[#111] text-[#fff] text-sm uppercase tracking-[0.12em] hover:bg-[#222] transition-colors duration-300"
+              style={{ borderRadius: 0 }}
             >
-              <span className="relative z-10">Start Your Synthesis</span>
-              <motion.div
-                className="absolute inset-0 bg-[#fff]"
-                initial={{ scaleX: 0 }}
-                whileHover={{ scaleX: 1 }}
-                transition={{ duration: 0.3 }}
-                style={{ originX: 0, zIndex: 0 }}
-              />
-              <span className="relative z-10 group-hover:text-[#111] transition-colors">
-                →
-              </span>
+              Initialize Synthesis
             </button>
-            <p className="text-xs text-[#888] uppercase tracking-widest">
-              Takes 3 minutes
-            </p>
           </motion.section>
         </motion.div>
       </main>

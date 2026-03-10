@@ -269,7 +269,14 @@ export default function EquiOnboarding() {
     <div className="min-h-screen bg-[#fff] text-[#111] font-sans">
       {/* Landing Section (Step 0) */}
       {currentStep === 0 ? (
-        <LandingSection onStart={() => setCurrentStep(1)} />
+        <LandingSection onStart={() => {
+          const landingSection = document.getElementById('landing-section');
+          if (landingSection) {
+            landingSection.style.opacity = '0';
+            landingSection.style.transition = 'opacity 300ms ease-out';
+          }
+          setTimeout(() => setCurrentStep(1), 300);
+        }} />
       ) : (
         <>
         <div className="max-w-2xl mx-auto px-6 py-12">
