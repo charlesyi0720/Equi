@@ -90,8 +90,12 @@ export default function EquiOnboarding() {
     const procrastinationIndex = mapProcrastinationToIndex(formData.procrastinationAnswer);
     const pressureSensitivity = mapPressureToIndex(formData.pressureAnswer);
     
+    // #region agent log
+    fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f336ac'},body:JSON.stringify({sessionId:'f336ac',location:'page.tsx:91',message:'formData.focusPeaks',data:{focusPeaks:formData.focusPeaks,energyDips:formData.energyDips},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     const focusPeaksFormatted = formData.focusPeaks.flatMap((peak) =>
-      peak.days.map((day) => ({
+      (peak?.days || []).map((day) => ({
         weekday: day,
         start: { hour: peak?.startHour ?? 9, minute: 0 },
         end: { hour: peak?.endHour ?? 12, minute: 0 },
@@ -99,7 +103,7 @@ export default function EquiOnboarding() {
     );
 
     const energyDipsFormatted = formData.energyDips.flatMap((dip) =>
-      dip.days.map((day) => ({
+      (dip?.days || []).map((day) => ({
         weekday: day,
         start: { hour: dip?.startHour ?? 14, minute: 0 },
         end: { hour: dip?.endHour ?? 15, minute: 0 },

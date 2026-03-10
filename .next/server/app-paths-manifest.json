@@ -1,7 +1,7 @@
 {
   "/_not-found/page": "app/_not-found/page.js",
-  "/equi/onboarding/page": "app/equi/onboarding/page.js",
   "/equi/page": "app/equi/page.js",
   "/api/vision/route": "app/api/vision/route.js",
+  "/equi/onboarding/page": "app/equi/onboarding/page.js",
   "/page": "app/page.js"
 }

@@ -90,7 +90,7 @@ function TimeSlotSelector({
       </select>
       <span className="text-xs text-[#666]">:</span>
       <select
-        value={slot.startMinute ?? 0}
+        value={slot?.startMinute ?? 0}
         onChange={(e) => onUpdate("startMinute", Number(e.target.value))}
         className="border-b border-[#ddd] py-1 bg-transparent outline-none text-sm font-mono w-12"
       >
@@ -114,7 +114,7 @@ function TimeSlotSelector({
       </select>
       <span className="text-xs text-[#666]">:</span>
       <select
-        value={slot.endMinute ?? 0}
+        value={slot?.endMinute ?? 0}
         onChange={(e) => onUpdate("endMinute", Number(e.target.value))}
         className="border-b border-[#ddd] py-1 bg-transparent outline-none text-sm font-mono w-12"
       >
@@ -161,16 +161,21 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
         return;
       }
 
-      const schedules: ImportedSchedule[] = events.map((e) => ({
-        id: e.id,
-        label: e.label,
-        day: e.day,
-        startHour: e?.startHour ?? 9,
-        endHour: e?.endHour ?? 10,
-        startMinute: e?.startMinute ?? 0,
-        endMinute: e?.endMinute ?? 0,
-        category: e.category,
-      }));
+      const schedules: ImportedSchedule[] = events.map((e) => {
+        // #region agent log
+        fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f336ac'},body:JSON.stringify({sessionId:'f336ac',location:'Step4.tsx:165',message:'Mapping event',data:{label:e?.label,day:e?.day,startHour:e?.startHour,endHour:e?.endHour,startMinute:e?.startMinute,endMinute:e?.endMinute},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        return {
+          id: e.id,
+          label: e.label,
+          day: e.day,
+          startHour: e?.startHour ?? 9,
+          endHour: e?.endHour ?? 10,
+          startMinute: e?.startMinute ?? 0,
+          endMinute: e?.endMinute ?? 0,
+          category: e.category,
+        };
+      });
 
       setImportedSchedules(schedules);
       setIsAnalyzing(false);
@@ -209,6 +214,9 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
       const result = await response.json();
 
       if (result.activities && result.activities.length > 0) {
+        // #region agent log
+        fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f336ac'},body:JSON.stringify({sessionId:'f336ac',location:'Step4.tsx:217',message:'Vision API result.activities',data:{count:result.activities.length,first:result.activities[0]},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         const schedules: ImportedSchedule[] = result.activities.map((a: ImportedSchedule) => ({
           id: a.id || generateId(),
           label: a.label,
