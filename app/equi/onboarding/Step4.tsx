@@ -165,10 +165,10 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
         id: e.id,
         label: e.label,
         day: e.day,
-        startHour: e.startHour,
-        endHour: e.endHour,
-        startMinute: e.startMinute,
-        endMinute: e.endMinute,
+        startHour: e?.startHour ?? 9,
+        endHour: e?.endHour ?? 10,
+        startMinute: e?.startMinute ?? 0,
+        endMinute: e?.endMinute ?? 0,
         category: e.category,
       }));
 
@@ -213,8 +213,8 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
           id: a.id || generateId(),
           label: a.label,
           day: a.day,
-          startHour: a.startHour,
-          endHour: a.endHour,
+          startHour: a?.startHour ?? 9,
+          endHour: a?.endHour ?? 10,
           category: a.category,
         }));
         setImportedSchedules(schedules);
@@ -293,10 +293,10 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
       }
       activity.slots.push({
         day: schedule.day,
-        startHour: schedule.startHour,
-        endHour: schedule.endHour,
-        startMinute: schedule.startMinute,
-        endMinute: schedule.endMinute,
+        startHour: schedule?.startHour ?? 9,
+        endHour: schedule?.endHour ?? 10,
+        startMinute: schedule?.startMinute ?? 0,
+        endMinute: schedule?.endMinute ?? 0,
       });
     });
 
@@ -388,8 +388,8 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
         ) : (
           <div className="space-y-3 max-h-[50vh] overflow-y-auto">
             {importedSchedules.map((schedule) => {
-              const startTimeStr = `${schedule.startHour.toString().padStart(2, '0')}:${schedule.startMinute.toString().padStart(2, '0')}`;
-              const endTimeStr = `${schedule.endHour.toString().padStart(2, '0')}:${schedule.endMinute.toString().padStart(2, '0')}`;
+              const startTimeStr = `${(schedule?.startHour ?? 9).toString().padStart(2, '0')}:${(schedule?.startMinute ?? 0).toString().padStart(2, '0')}`;
+              const endTimeStr = `${(schedule?.endHour ?? 10).toString().padStart(2, '0')}:${(schedule?.endMinute ?? 0).toString().padStart(2, '0')}`;
               
               return (
                 <div

@@ -93,16 +93,16 @@ export default function EquiOnboarding() {
     const focusPeaksFormatted = formData.focusPeaks.flatMap((peak) =>
       peak.days.map((day) => ({
         weekday: day,
-        start: { hour: peak.startHour, minute: 0 },
-        end: { hour: peak.endHour, minute: 0 },
+        start: { hour: peak?.startHour ?? 9, minute: 0 },
+        end: { hour: peak?.endHour ?? 12, minute: 0 },
       }))
     );
 
     const energyDipsFormatted = formData.energyDips.flatMap((dip) =>
       dip.days.map((day) => ({
         weekday: day,
-        start: { hour: dip.startHour, minute: 0 },
-        end: { hour: dip.endHour, minute: 0 },
+        start: { hour: dip?.startHour ?? 14, minute: 0 },
+        end: { hour: dip?.endHour ?? 15, minute: 0 },
       }))
     );
 
@@ -186,14 +186,27 @@ export default function EquiOnboarding() {
   const handleSubmit = () => {
     try {
       const equiUser = buildEquiUser();
-      console.log("EquiUser Created:", equiUser);
+      
+      // PATCH: Ensure biologicalClock has default values if missing
+      const finalData = {
+        ...equiUser,
+        understanding: {
+          ...equiUser.understanding,
+          biologicalClock: {
+            focusPeaks: equiUser.understanding?.biologicalClock?.focusPeaks ?? [],
+            energyDips: equiUser.understanding?.biologicalClock?.energyDips ?? [],
+          }
+        }
+      };
+      
+      console.log("FINAL DATA TO BE SAVED:", finalData);
       
       // Save to localStorage
-      localStorage.setItem("EQUI_USER_DATA", JSON.stringify(equiUser));
+      localStorage.setItem("EQUI_USER_DATA", JSON.stringify(finalData));
       console.log("User data saved to localStorage");
       
       // Set submitted state to show summary view
-      setSubmittedUser(equiUser);
+      setSubmittedUser(finalData);
       setIsSubmitted(true);
       
       // alert("Onboarding complete! Check console for EquiUser object.");
