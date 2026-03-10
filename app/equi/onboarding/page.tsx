@@ -632,9 +632,10 @@ function Step3Rhythms({ formData, updateFormData, onNext, onBack }: Step3Rhythms
   const toggleDay = (blockIndex: number, type: "focusPeaks" | "energyDips", day: Weekday) => {
     const blocks = type === "focusPeaks" ? formData.focusPeaks : formData.energyDips;
     const block = blocks[blockIndex];
-    const newDays = block.days.includes(day)
-      ? block.days.filter((d) => d !== day)
-      : [...block.days, day];
+    const blockDays = block?.days || [];
+    const newDays = blockDays.includes(day)
+      ? blockDays.filter((d) => d !== day)
+      : [...blockDays, day];
     
     if (type === "focusPeaks") {
       updateFocusPeak(blockIndex, "days", newDays);
@@ -651,7 +652,7 @@ function Step3Rhythms({ formData, updateFormData, onNext, onBack }: Step3Rhythms
     }
   };
 
-  const isValid = formData.focusPeaks.length > 0 && formData.focusPeaks.every((p) => p.days.length > 0);
+  const isValid = formData.focusPeaks.length > 0 && formData.focusPeaks.every((p) => (p?.days || []).length > 0);
 
   return (
     <motion.div
@@ -697,7 +698,7 @@ function Step3Rhythms({ formData, updateFormData, onNext, onBack }: Step3Rhythms
                   <DayToggle
                     key={day}
                     day={day}
-                    selected={peak.days.includes(day)}
+                    selected={(peak?.days || []).includes(day)}
                     onToggle={() => toggleDay(index, "focusPeaks", day)}
                   />
                 ))}
@@ -737,7 +738,7 @@ function Step3Rhythms({ formData, updateFormData, onNext, onBack }: Step3Rhythms
                   <DayToggle
                     key={day}
                     day={day}
-                    selected={dip.days.includes(day)}
+                    selected={(dip?.days || []).includes(day)}
                     onToggle={() => toggleDay(index, "energyDips", day)}
                   />
                 ))}
