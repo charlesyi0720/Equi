@@ -67,16 +67,18 @@ function TimeSlotSelector({
   onUpdate,
   onRemove,
 }: {
-  slot: ActivitySlot;
+  slot: ActivitySlot | undefined;
   day: Weekday;
   onUpdate: (field: "startHour" | "endHour" | "startMinute" | "endMinute", value: number) => void;
   onRemove: () => void;
 }) {
+  if (!slot) return null;
+  
   return (
     <div className="flex items-center gap-2 p-3 border border-[#111] bg-[#fff]">
       <span className="text-xs font-medium w-8">{day.slice(0, 2)}</span>
       <select
-        value={slot.startHour}
+        value={slot?.startHour ?? 9}
         onChange={(e) => onUpdate("startHour", Number(e.target.value))}
         className="border-b border-[#ddd] py-1 bg-transparent outline-none text-sm font-mono"
       >
@@ -100,7 +102,7 @@ function TimeSlotSelector({
       </select>
       <span className="text-xs text-[#666]">→</span>
       <select
-        value={slot.endHour}
+        value={slot?.endHour ?? 10}
         onChange={(e) => onUpdate("endHour", Number(e.target.value))}
         className="border-b border-[#ddd] py-1 bg-transparent outline-none text-sm font-mono"
       >

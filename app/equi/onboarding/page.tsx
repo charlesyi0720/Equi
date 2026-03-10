@@ -665,13 +665,13 @@ function Step3Rhythms({ formData, updateFormData, onNext, onBack }: Step3Rhythms
               </div>
               <TimeSlider
                 label="Start"
-                value={peak.startHour}
+                value={peak?.startHour ?? 9}
                 onChange={(v) => updateFocusPeak(index, "startHour", v)}
                 color="#111"
               />
               <TimeSlider
                 label="End"
-                value={peak.endHour}
+                value={peak?.endHour ?? 12}
                 onChange={(v) => updateFocusPeak(index, "endHour", v)}
                 color="#111"
               />
@@ -705,13 +705,13 @@ function Step3Rhythms({ formData, updateFormData, onNext, onBack }: Step3Rhythms
               </div>
               <TimeSlider
                 label="Start"
-                value={dip.startHour}
+                value={dip?.startHour ?? 14}
                 onChange={(v) => updateEnergyDip(index, "startHour", v)}
                 color="#999"
               />
               <TimeSlider
                 label="End"
-                value={dip.endHour}
+                value={dip?.endHour ?? 15}
                 onChange={(v) => updateEnergyDip(index, "endHour", v)}
                 color="#999"
               />
@@ -1012,6 +1012,7 @@ interface SummaryViewProps {
 
 function SummaryView({ user }: SummaryViewProps) {
   const name = user?.understanding?.name || "User";
+  const occupation = user?.understanding?.occupation || "Professional";
   const persona = user?.understanding?.preferredAgentPersona || AgentPersona.DevotedSecretary;
   
   // Safely calculate fixed slots count
@@ -1060,7 +1061,7 @@ function SummaryView({ user }: SummaryViewProps) {
           {name}, your Digital Twin is initialized.
         </h2>
         <p className="text-[#666] text-sm">
-          Your personal AI lifestyle architect is ready to help you optimize your time.
+          {occupation} • Your personal AI lifestyle architect is ready to help you optimize your time.
         </p>
       </div>
       
@@ -1112,12 +1113,12 @@ function SummaryView({ user }: SummaryViewProps) {
           <div className="space-y-2">
             {flexibleActivities.length > 0 ? (
               flexibleActivities.map((activity, index) => {
-                const hours = activity.flexibleQuota 
+                const hours = activity?.flexibleQuota?.dailyMinutes 
                   ? (activity.flexibleQuota.dailyMinutes / 60).toFixed(1) 
                   : "0";
                 return (
                   <div key={index} className="flex justify-between">
-                    <span className="text-sm text-[#666] truncate mr-2">{activity.label}</span>
+                    <span className="text-sm text-[#666] truncate mr-2">{activity.label || "Activity"}</span>
                     <span className="text-sm font-mono whitespace-nowrap">{hours}h</span>
                   </div>
                 );
