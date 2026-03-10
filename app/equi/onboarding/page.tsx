@@ -52,6 +52,8 @@ function generateId(): string {
 
 export default function EquiOnboarding() {
   const [currentStep, setCurrentStep] = useState(1);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [submittedUser, setSubmittedUser] = useState<EquiUser | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     occupation: "",
@@ -182,9 +184,23 @@ export default function EquiOnboarding() {
   };
 
   const handleSubmit = () => {
-    const equiUser = buildEquiUser();
-    console.log("EquiUser Created:", equiUser);
-    alert("Onboarding complete! Check console for EquiUser object.");
+    try {
+      const equiUser = buildEquiUser();
+      console.log("EquiUser Created:", equiUser);
+      
+      // Save to localStorage
+      localStorage.setItem("EQUI_USER_DATA", JSON.stringify(equiUser));
+      console.log("User data saved to localStorage");
+      
+      // Set submitted state to show summary view
+      setSubmittedUser(equiUser);
+      setIsSubmitted(true);
+      
+      // alert("Onboarding complete! Check console for EquiUser object.");
+    } catch (error) {
+      console.error("Error during submission:", error);
+      alert("Failed to complete onboarding. Check console for details.");
+    }
   };
 
   const steps = [
@@ -233,6 +249,10 @@ export default function EquiOnboarding() {
         </div>
 
         <AnimatePresence mode="wait">
+          {isSubmitted && submittedUser ? (
+            <SummaryView user={submittedUser} />
+          ) : (
+            <>
           {currentStep === 1 && (
             <Step1Identity
               key="step1"
@@ -285,6 +305,8 @@ export default function EquiOnboarding() {
               onBack={prevStep}
               onSubmit={handleSubmit}
             />
+          )}
+            </>
           )}
         </AnimatePresence>
       </div>
@@ -975,6 +997,163 @@ function Step6Persona({ formData, updateFormData, onBack, onSubmit }: Step6Perso
         >
           Complete Setup
         </button>
+      </div>
+    </motion.div>
+  );
+}
+
+// ============================================================================
+// SUMMARY VIEW: DIGITAL TWIN INITIALIZED
+// ============================================================================
+
+interface SummaryViewProps {
+  user: EquiUser;
+}
+
+function SummaryView({ user }: SummaryViewProps) {
+  const name = user.understanding.name || "User";
+  const persona = user.understanding.preferredAgentPersona;
+  const fixedSlotsCount = user.lifeStructure.fixedActivities.reduce((count, activity) => {
+    if (activity.activityType === "strictlyFixed") {
+      return count + activity.slots.length;
+    }
+    return count;
+  }, 0);
+  
+  // Find flexible activities
+  const flexibleActivities = user.lifeStructure.fixedActivities.filter(
+    activity => activity.activityType === "flexibleFloating"
+  );
+  
+  const personaInfo = {
+    [AgentPersona.DevotedSecretary]: {
+      icon: "✦",
+      greeting: "Hello! I'm here to support you every step of the way.",
+    },
+    [AgentPersona.HardSupervisor]: {
+      icon: "⚡",
+      greeting: "Let's get to work. No excuses, no delays.",
+    },
+  };
+  
+  const currentPersona = personaInfo[persona];
+  
+  // Determine pressure sensitivity label
+  const pressureSensitivity = user.understanding.pressureSensitivity;
+  const pressureLabel = pressureSensitivity <= 3 ? "High" : pressureSensitivity <= 6 ? "Medium" : "Low";
+  
+  // Determine planning style
+  const planningStyle = user.understanding.planningStyle;
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="space-y-12"
+    >
+      {/* Header */}
+      <div className="space-y-4">
+        <h2 className="text-4xl font-light text-[#111] tracking-tight">
+          {name}, your Digital Twin is initialized.
+        </h2>
+        <p className="text-[#666] text-sm">
+          Your personal AI lifestyle architect is ready to help you optimize your time.
+        </p>
+      </div>
+      
+      {/* Core Data Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Personality Card */}
+        <div className="p-6 border border-[#111] space-y-4">
+          <div className="text-xs uppercase tracking-widest text-[#666]">Personality Profile</div>
+          <div className="space-y-2">
+            <div className="flex justify-between">
+              <span className="text-sm text-[#666]">MBTI</span>
+              <span className="text-sm font-mono">{user.understanding.mbti}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-[#666]">Pressure Sensitivity</span>
+              <span className="text-sm font-mono">{pressureLabel}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-[#666]">Planning Style</span>
+              <span className="text-sm font-mono">{planningStyle}</span>
+            </div>
+          </div>
+        </div>
+        
+        {/* Time Assets Card */}
+        <div className="p-6 border border-[#111] space-y-4">
+          <div className="text-xs uppercase tracking-widest text-[#666]">Time Assets</div>
+          <div className="space-y-2">
+            <div className="flex justify-between">
+              <span className="text-sm text-[#666]">Fixed Slots</span>
+              <span className="text-sm font-mono">{fixedSlotsCount} Detected</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-[#666]">Focus Peaks</span>
+              <span className="text-sm font-mono">
+                {user.understanding.biologicalClock.focusPeaks.length} periods
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-[#666]">Life Mode</span>
+              <span className="text-sm font-mono">{user.understanding.lifeState.mode}</span>
+            </div>
+          </div>
+        </div>
+        
+        {/* Flexible Tasks Card */}
+        <div className="p-6 border border-[#111] space-y-4">
+          <div className="text-xs uppercase tracking-widest text-[#666]">Flexible Tasks</div>
+          <div className="space-y-2">
+            {flexibleActivities.length > 0 ? (
+              flexibleActivities.map((activity, index) => {
+                const hours = activity.flexibleQuota 
+                  ? (activity.flexibleQuota.dailyMinutes / 60).toFixed(1) 
+                  : "0";
+                return (
+                  <div key={index} className="flex justify-between">
+                    <span className="text-sm text-[#666] truncate mr-2">{activity.label}</span>
+                    <span className="text-sm font-mono whitespace-nowrap">{hours}h</span>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="text-sm text-[#666]">No flexible quotas set</div>
+            )}
+          </div>
+        </div>
+      </div>
+      
+      {/* Agent Persona Section */}
+      <div className="p-6 border border-[#111] space-y-4">
+        <div className="text-xs uppercase tracking-widest text-[#666]">Your Agent</div>
+        <div className="flex items-center gap-6">
+          <div className="w-16 h-16 bg-[#111] text-[#fff] flex items-center justify-center text-3xl">
+            {currentPersona.icon}
+          </div>
+          <div className="flex-1">
+            <div className="text-lg font-medium mb-1">
+              {persona === AgentPersona.DevotedSecretary ? "Devoted Secretary" : "Hard Supervisor"}
+            </div>
+            <div className="text-sm text-[#666]">{currentPersona.greeting}</div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Action Button */}
+      <div className="pt-6 border-t border-[#eee]">
+        <button
+          disabled
+          className="w-full px-8 py-4 text-sm uppercase tracking-widest bg-[#eee] text-[#999] cursor-not-allowed"
+        >
+          Go to Dashboard (Coming Soon)
+        </button>
+        <p className="text-xs text-[#666] text-center mt-4">
+          Your data has been saved locally. Dashboard access coming soon.
+        </p>
       </div>
     </motion.div>
   );
