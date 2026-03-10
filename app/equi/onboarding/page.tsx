@@ -68,7 +68,7 @@ export default function EquiOnboarding() {
       category: CognitiveCategory;
       activityType: "strictlyFixed" | "flexibleFloating";
       weekdayPattern: Weekday[];
-      slots: { day: Weekday; startHour: number; endHour: number }[];
+      slots: { day: Weekday; startHour: number; endHour: number; startMinute?: number; endMinute?: number }[];
       flexibleQuota?: { dailyMinutes: number; preferredSlot: "focusPeaks" | "anytime" };
       isHardConstraint: boolean;
     }[],
