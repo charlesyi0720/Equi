@@ -23,20 +23,17 @@ const MBTI_DESCRIPTIONS: Record<string, string> = {
   "ESFP": "The Entertainer",
 };
 
-// 4 axes with behavioral-friendly labels
+// 4 axes with correct MBTI letters
 const AXES = [
-  { key: "energy", left: "Introvert", right: "Extrovert", leftHint: "Deep internal focus", rightHint: "Active external interaction" },
-  { key: "info", left: "Intuitive", right: "Sensing", leftHint: "Patterns and possibilities", rightHint: "Concrete facts" },
-  { key: "decision", left: "Thinking", right: "Feeling", leftHint: "Logic and objectivity", rightHint: "People and values" },
-  { key: "lifestyle", left: "Judging", right: "Perceiving", leftHint: "Organized and planned", rightHint: "Flexible and spontaneous" },
+  { key: "energy", left: "Introvert", right: "Extrovert", leftLetter: "I", rightLetter: "E", leftHint: "Deep internal focus", rightHint: "Active external interaction" },
+  { key: "info", left: "Intuitive", right: "Sensing", leftLetter: "N", rightLetter: "S", leftHint: "Patterns and possibilities", rightHint: "Concrete facts" },
+  { key: "decision", left: "Thinking", right: "Feeling", leftLetter: "T", rightLetter: "F", leftHint: "Logic and objectivity", rightHint: "People and values" },
+  { key: "lifestyle", left: "Judging", right: "Perceiving", leftLetter: "J", rightLetter: "P", leftHint: "Organized and planned", rightHint: "Flexible and spontaneous" },
 ];
 
-// Convert axis values (0-100) to MBTI code
-// 0-49 = left letter (I, N, T, J)
-// 50-100 = right letter (E, S, F, P)
+// Convert binary axis values (0 or 1) to MBTI code
 function getMBTICode(axes: number[]): string {
-  const letters = ["I", "E", "N", "S", "T", "F", "J", "P"];
-  return axes.map((v, i) => v >= 50 ? letters[i*2+1] : letters[i*2]).join("");
+  return AXES.map((axis, i) => axes[i] === 1 ? axis.rightLetter : axis.leftLetter).join("");
 }
 
 // Inference data from Step 2
@@ -47,47 +44,36 @@ interface InferenceData {
   pressureAnswer: string;
 }
 
-// Map Step 2 behavioral answers to MBTI axis values (0-100)
-function inferMBTIAxes(f: InferenceData): number[] {
-  // Default to middle values
-  const axes = [50, 50, 50, 50];
+// Map Step 2 behavioral answers to binary MBTI values (0 or 1)
+function inferMBTIBinary(f: InferenceData): number[] {
+  const axes = [0, 0, 0, 0]; // Default all to left (0)
   
   // Pressure Answer -> Energy Axis (E/I)
-  // "thrive" or "motivated" under pressure = Extrovert (more external energy)
-  // "paralyzed" by pressure = Introvert (internal focus, overwhelmed)
   if (f.pressureAnswer === "thrive" || f.pressureAnswer === "motivated") {
-    axes[0] = 80; // Strong Extrovert
+    axes[0] = 1; // Extrovert
   } else if (f.pressureAnswer === "paralyzed") {
-    axes[0] = 20; // Strong Introvert
-  } else if (f.pressureAnswer === "uncomfortable") {
-    axes[0] = 35; // Mild Introvert
+    axes[0] = 0; // Introvert
   }
   
   // Focus Level -> Information Axis (N/S)
-  // "deep" focus = Intuitive (abstract, patterns)
-  // "flexible" = Sensing (concrete, practical)
-  // "varied" = balanced
   if (f.focusLevel === "deep") {
-    axes[1] = 25; // Mild Intuitive
+    axes[1] = 0; // Intuitive
   } else if (f.focusLevel === "flexible") {
-    axes[1] = 75; // Mild Sensing
+    axes[1] = 1; // Sensing
   }
   
   // Planning Style -> Lifestyle Axis (J/P)
-  // "structured" = Judging (planned, organized)
-  // "spontaneous" = Perceiving (flexible, spontaneous)
   if (f.planningStyleAnswer === "structured") {
-    axes[3] = 20; // Strong Judging
+    axes[3] = 0; // Judging
   } else if (f.planningStyleAnswer === "spontaneous") {
-    axes[3] = 80; // Strong Perceiving
+    axes[3] = 1; // Perceiving
   }
   
   // Procrastination -> Secondary Lifestyle (J/P)
-  // Procrastinators tend toward Perceiving
   if (f.procrastinationAnswer === "night-before" || f.procrastinationAnswer === "last-minute") {
-    axes[3] = Math.max(axes[3], 65); // Push toward Perceiving
+    axes[3] = 1; // Perceiving
   } else if (f.procrastinationAnswer === "immediately" || f.procrastinationAnswer === "same-day") {
-    axes[3] = Math.min(axes[3], 35); // Push toward Judging
+    axes[3] = 0; // Judging
   }
   
   return axes;
@@ -115,7 +101,7 @@ interface StepCalibrationProps {
 export function StepCalibration({ formData, updateFormData, onNext, onBack }: StepCalibrationProps) {
   // Compute initial axis values from Step 2 data (inference)
   const initialAxes = useMemo(() => {
-    return inferMBTIAxes({
+    return inferMBTIBinary({
       focusLevel: formData.focusLevel || "",
       planningStyleAnswer: formData.planningStyleAnswer || "",
       procrastinationAnswer: formData.procrastinationAnswer || "",
@@ -123,7 +109,7 @@ export function StepCalibration({ formData, updateFormData, onNext, onBack }: St
     });
   }, [formData.focusLevel, formData.planningStyleAnswer, formData.procrastinationAnswer, formData.pressureAnswer]);
   
-  // Use initial axes as default, but allow user to override
+  // Binary values: 0 = left, 1 = right
   const [axisValues, setAxisValues] = useState<number[]>(initialAxes);
   const [edited, setEdited] = useState(false);
   
@@ -142,17 +128,11 @@ export function StepCalibration({ formData, updateFormData, onNext, onBack }: St
     updateFormData({ understanding: { mbti: mbtiCode } });
   }, [mbtiCode, updateFormData]);
 
-  const handleChange = (i: number, v: number) => {
+  // Toggle between 0 and 1
+  const handleToggle = (i: number) => {
     setEdited(true);
     const newAxes = [...axisValues];
-    newAxes[i] = v;
-    setAxisValues(newAxes);
-  };
-
-  const handleEnd = (i: number, v: number) => {
-    // Keep the value as-is (allows smooth sliding), just update formData
-    const newAxes = [...axisValues];
-    newAxes[i] = v;
+    newAxes[i] = axisValues[i] === 0 ? 1 : 0;
     setAxisValues(newAxes);
     updateFormData({ understanding: { mbti: getMBTICode(newAxes) } });
   };
@@ -168,7 +148,7 @@ export function StepCalibration({ formData, updateFormData, onNext, onBack }: St
         <h2 className="text-3xl font-light text-[#111] tracking-tight">Digital Persona Reveal</h2>
         <p className="text-[#666] text-sm">
           Based on your behavioral patterns, Equi has inferred your digital persona. 
-          Fine-tune the sliders to match your self-perception.
+          Toggle to adjust if needed.
         </p>
       </div>
 
@@ -181,53 +161,55 @@ export function StepCalibration({ formData, updateFormData, onNext, onBack }: St
         <p className="text-sm text-[#111] border-t border-[#ddd] pt-4">{trait}</p>
       </div>
 
-      {/* 4 Axis Sliders with improved styling */}
-      <div className="space-y-8">
+      {/* Binary Toggles for 4 Axes */}
+      <div className="space-y-6">
         {AXES.map((axis, i) => {
-          const v = axisValues[i];
-          const leftActive = v < 50;
-          const rightActive = v >= 50;
+          const value = axisValues[i];
+          const isLeft = value === 0;
+          const isRight = value === 1;
           
           return (
             <div key={axis.key} className="space-y-3">
               {/* Labels */}
               <div className="flex justify-between items-center">
                 <span className={`text-xs uppercase tracking-widest transition-colors ${
-                  leftActive ? 'text-[#111] font-semibold' : 'text-[#999]'
+                  isLeft ? 'text-[#111] font-semibold' : 'text-[#999]'
                 }`}>
-                  {axis.left} (I)
+                  {axis.left} ({axis.leftLetter})
                 </span>
                 <span className={`text-xs uppercase tracking-widest transition-colors ${
-                  rightActive ? 'text-[#111] font-semibold' : 'text-[#999]'
+                  isRight ? 'text-[#111] font-semibold' : 'text-[#999]'
                 }`}>
-                  {axis.right} (E)
+                  {axis.right} ({axis.rightLetter})
                 </span>
               </div>
               
-              {/* Slider - Full width with proper thumb */}
-              <div className="relative">
-                <input 
-                  type="range" 
-                  min="0" 
-                  max="100" 
-                  step="1" 
-                  value={v}
-                  onChange={e => handleChange(i, +e.target.value)}
-                  onMouseUp={e => handleEnd(i, +(e.target as HTMLInputElement).value)}
-                  onTouchEnd={e => handleEnd(i, +((e.target as HTMLInputElement).value))}
-                  className="w-full h-2 cursor-pointer"
-                  style={{ 
-                    background: `linear-gradient(to right, #111 ${v}%, #ddd ${v}%, #ddd 100%)`,
-                  }} 
+              {/* Binary Toggle Button */}
+              <button
+                type="button"
+                onClick={() => handleToggle(i)}
+                className="w-full h-12 relative cursor-pointer"
+              >
+                <div 
+                  className="w-full h-2 rounded-full transition-colors"
+                  style={{
+                    background: isRight ? '#111' : '#ddd',
+                  }}
                 />
-              </div>
+                <div 
+                  className="absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[#111] border-2 border-[#fff] shadow-md transition-all"
+                  style={{
+                    left: isRight ? 'calc(100% - 16px)' : '4px',
+                  }}
+                />
+              </button>
               
               {/* Hints */}
               <div className="flex justify-between">
-                <span className={`text-xs transition-colors ${leftActive ? 'text-[#111]' : 'text-[#ccc]'}`}>
+                <span className={`text-xs transition-colors ${isLeft ? 'text-[#111]' : 'text-[#ccc]'}`}>
                   {axis.leftHint}
                 </span>
-                <span className={`text-xs transition-colors ${rightActive ? 'text-[#111]' : 'text-[#ccc]'}`}>
+                <span className={`text-xs transition-colors ${isRight ? 'text-[#111]' : 'text-[#ccc]'}`}>
                   {axis.rightHint}
                 </span>
               </div>
@@ -240,7 +222,7 @@ export function StepCalibration({ formData, updateFormData, onNext, onBack }: St
       <div className="flex gap-4">
         <button 
           onClick={onBack} 
-          className="px-8 py-4 text-sm uppercase tracking-widest border border-[#ddd] hover:border-[#111] transition-all"
+          className="px-8 py- tracking-widest4 text-sm uppercase border border-[#ddd] hover:border-[#111] transition-all"
         >
           Back
         </button>
@@ -254,42 +236,6 @@ export function StepCalibration({ formData, updateFormData, onNext, onBack }: St
           Continue
         </button>
       </div>
-
-      {/* Global slider styles */}
-      <style jsx global>{`
-        input[type=range] {
-          -webkit-appearance: none;
-          appearance: none;
-          height: 4px;
-          border-radius: 2px;
-          outline: none;
-          width: 100%;
-        }
-        input[type=range]::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          appearance: none;
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
-          background: #111;
-          border: 3px solid #fff;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-          cursor: pointer;
-          transition: transform 0.1s ease;
-        }
-        input[type=range]::-webkit-slider-thumb:hover {
-          transform: scale(1.15);
-        }
-        input[type=range]::-moz-range-thumb {
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
-          background: #111;
-          border: 3px solid #fff;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-          cursor: pointer;
-        }
-      `}</style>
     </motion.div>
   );
 }
