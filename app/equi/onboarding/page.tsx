@@ -14,6 +14,7 @@ import {
 } from "../types";
 import { Step4Structures } from "./Step4";
 import { StepCalibration } from "./StepCalibration";
+import { LandingSection } from "./LandingSection";
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -61,7 +62,7 @@ export default function EquiOnboarding() {
     return () => window.removeEventListener('error', handleError);
   }, []);
   
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submittedUser, setSubmittedUser] = useState<EquiUser | null>(null);
   const [formData, setFormData] = useState({
@@ -100,7 +101,7 @@ export default function EquiOnboarding() {
   };
 
   const nextStep = () => setCurrentStep((prev) => Math.min(prev + 1, 7));
-  const prevStep = () => setCurrentStep((prev) => Math.max(prev - 1, 1));
+  const prevStep = () => setCurrentStep((prev) => Math.max(prev - 1, 0));
 
   // Scroll to top on step transition
   useEffect(() => {
@@ -266,39 +267,46 @@ export default function EquiOnboarding() {
 
   return (
     <div className="min-h-screen bg-[#fff] text-[#111] font-sans">
-      <div className="max-w-2xl mx-auto px-6 py-12">
-        <div className="mb-12">
-          <h1 className="text-2xl font-light tracking-tight mb-2">EQUI</h1>
-          <p className="text-xs text-[#666] uppercase tracking-widest">Personal AI Lifestyle Architect</p>
-        </div>
-
-        <div className="mb-12">
-          <div className="flex items-center gap-2">
-            {steps.map((step, index) => (
-              <div key={step.number} className="flex items-center">
-                <div
-                  className={`w-8 h-8 flex items-center justify-center text-xs font-medium transition-all ${
-                    currentStep >= step.number
-                      ? "bg-[#111] text-[#fff]"
-                      : "bg-[#eee] text-[#999]"
-                  }`}
-                >
-                  {step.number}
-                </div>
-                {index < steps.length - 1 && (
-                  <div
-                    className={`w-12 h-px transition-all ${
-                      currentStep > step.number ? "bg-[#111]" : "bg-[#eee]"
-                    }`}
-                  />
-                )}
-              </div>
-            ))}
+      {/* Landing Section (Step 0) */}
+      {currentStep === 0 ? (
+        <LandingSection onStart={() => setCurrentStep(1)} />
+      ) : (
+        <>
+        <div className="max-w-2xl mx-auto px-6 py-12">
+          <div className="mb-12">
+            <h1 className="text-2xl font-light tracking-tight mb-2">EQUI</h1>
+            <p className="text-xs text-[#666] uppercase tracking-widest">Personal AI Lifestyle Architect</p>
           </div>
-          <p className="mt-4 text-xs text-[#666] uppercase tracking-widest">
-            Step {currentStep}: {steps[currentStep - 1].label}
-          </p>
-        </div>
+
+          <div className="mb-12">
+            <div className="flex items-center gap-2">
+              {steps.map((step, index) => (
+                <div key={step.number} className="flex items-center">
+                  <div
+                    className={`w-8 h-8 flex items-center justify-center text-xs font-medium transition-all ${
+                      currentStep > step.number
+                        ? "bg-[#111] text-[#fff]"
+                        : currentStep === step.number
+                        ? "bg-[#111] text-[#fff]"
+                        : "bg-[#eee] text-[#999]"
+                    }`}
+                  >
+                    {step.number}
+                  </div>
+                  {index < steps.length - 1 && (
+                    <div
+                      className={`w-12 h-px transition-all ${
+                        currentStep > step.number ? "bg-[#111]" : "bg-[#eee]"
+                      }`}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+            <p className="mt-4 text-xs text-[#666] uppercase tracking-widest">
+              Step {currentStep}: {steps[currentStep - 1].label}
+            </p>
+          </div>
 
         <AnimatePresence mode="wait">
           {isSubmitted && submittedUser ? (
@@ -370,7 +378,9 @@ export default function EquiOnboarding() {
             </>
           )}
         </AnimatePresence>
-      </div>
+        </div>
+        </>
+      )}
     </div>
   );
 }
