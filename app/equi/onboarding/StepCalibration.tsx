@@ -46,34 +46,34 @@ interface InferenceData {
 
 // Map Step 2 behavioral answers to binary MBTI values (0 or 1)
 function inferMBTIBinary(f: InferenceData): number[] {
-  const axes = [0, 0, 0, 0]; // Default all to left (0)
+  const axes = [0, 0, 0, 0];
   
   // Pressure Answer -> Energy Axis (E/I)
   if (f.pressureAnswer === "thrive" || f.pressureAnswer === "motivated") {
-    axes[0] = 1; // Extrovert
+    axes[0] = 1;
   } else if (f.pressureAnswer === "paralyzed") {
-    axes[0] = 0; // Introvert
+    axes[0] = 0;
   }
   
   // Focus Level -> Information Axis (N/S)
   if (f.focusLevel === "deep") {
-    axes[1] = 0; // Intuitive
+    axes[1] = 0;
   } else if (f.focusLevel === "flexible") {
-    axes[1] = 1; // Sensing
+    axes[1] = 1;
   }
   
   // Planning Style -> Lifestyle Axis (J/P)
   if (f.planningStyleAnswer === "structured") {
-    axes[3] = 0; // Judging
+    axes[3] = 0;
   } else if (f.planningStyleAnswer === "spontaneous") {
-    axes[3] = 1; // Perceiving
+    axes[3] = 1;
   }
   
   // Procrastination -> Secondary Lifestyle (J/P)
   if (f.procrastinationAnswer === "night-before" || f.procrastinationAnswer === "last-minute") {
-    axes[3] = 1; // Perceiving
+    axes[3] = 1;
   } else if (f.procrastinationAnswer === "immediately" || f.procrastinationAnswer === "same-day") {
-    axes[3] = 0; // Judging
+    axes[3] = 0;
   }
   
   return axes;
@@ -99,7 +99,6 @@ interface StepCalibrationProps {
 }
 
 export function StepCalibration({ formData, updateFormData, onNext, onBack }: StepCalibrationProps) {
-  // Compute initial axis values from Step 2 data (inference)
   const initialAxes = useMemo(() => {
     return inferMBTIBinary({
       focusLevel: formData.focusLevel || "",
@@ -109,11 +108,9 @@ export function StepCalibration({ formData, updateFormData, onNext, onBack }: St
     });
   }, [formData.focusLevel, formData.planningStyleAnswer, formData.procrastinationAnswer, formData.pressureAnswer]);
   
-  // Binary values: 0 = left, 1 = right
   const [axisValues, setAxisValues] = useState<number[]>(initialAxes);
   const [edited, setEdited] = useState(false);
   
-  // Recalculate when Step 2 data changes (if not yet edited)
   useEffect(() => {
     if (!edited) {
       setAxisValues(initialAxes);
@@ -123,16 +120,14 @@ export function StepCalibration({ formData, updateFormData, onNext, onBack }: St
   const mbtiCode = getMBTICode(axisValues);
   const trait = MBTI_DESCRIPTIONS[mbtiCode] || "Unknown";
 
-  // Update formData when MBTI changes
   useEffect(() => {
     updateFormData({ understanding: { mbti: mbtiCode } });
   }, [mbtiCode, updateFormData]);
 
-  // Toggle between 0 and 1
-  const handleToggle = (i: number) => {
+  const handleToggle = (i: number, value: number) => {
     setEdited(true);
     const newAxes = [...axisValues];
-    newAxes[i] = axisValues[i] === 0 ? 1 : 0;
+    newAxes[i] = value;
     setAxisValues(newAxes);
     updateFormData({ understanding: { mbti: getMBTICode(newAxes) } });
   };
@@ -161,58 +156,79 @@ export function StepCalibration({ formData, updateFormData, onNext, onBack }: St
         <p className="text-sm text-[#111] border-t border-[#ddd] pt-4">{trait}</p>
       </div>
 
-      {/* Binary Toggles for 4 Axes */}
-      <div className="space-y-6">
+      {/* Segmented Controls for 4 Axes */}
+      <div className="space-y-4">
         {AXES.map((axis, i) => {
           const value = axisValues[i];
           const isLeft = value === 0;
           const isRight = value === 1;
           
           return (
-            <div key={axis.key} className="space-y-3">
-              {/* Labels */}
+            <div key={axis.key} className="space-y-2">
+              {/* Axis Label */}
               <div className="flex justify-between items-center">
-                <span className={`text-xs uppercase tracking-widest transition-colors ${
-                  isLeft ? 'text-[#111] font-semibold' : 'text-[#999]'
-                }`}>
-                  {axis.left} ({axis.leftLetter})
-                </span>
-                <span className={`text-xs uppercase tracking-widest transition-colors ${
-                  isRight ? 'text-[#111] font-semibold' : 'text-[#999]'
-                }`}>
-                  {axis.right} ({axis.rightLetter})
+                <span className="text-xs uppercase tracking-widest text-[#111] font-medium">
+                  {axis.key === 'energy' && 'Energy'}
+                  {axis.key === 'info' && 'Information'}
+                  {axis.key === 'decision' && 'Decision'}
+                  {axis.key === 'lifestyle' && 'Lifestyle'}
                 </span>
               </div>
               
-              {/* Binary Toggle Button */}
-              <button
-                type="button"
-                onClick={() => handleToggle(i)}
-                className="w-full h-12 relative cursor-pointer"
-              >
-                <div 
-                  className="w-full h-2 rounded-full transition-colors"
-                  style={{
-                    background: isRight ? '#111' : '#ddd',
+              {/* Segmented Control */}
+              <div className="relative w-full h-10 bg-[#f5f5f5] rounded-sm flex overflow-hidden">
+                {/* Active Indicator */}
+                <motion.div
+                  className="absolute top-0 h-full bg-[#111] rounded-sm"
+                  initial={false}
+                  animate={{
+                    left: isLeft ? 0 : "50%",
+                    width: "50%",
                   }}
+                  transition={{ type: "spring", stiffness: 400, damping: 30 }}
                 />
-                <div 
-                  className="absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[#111] border-2 border-[#fff] shadow-md transition-all"
-                  style={{
-                    left: isRight ? 'calc(100% - 16px)' : '4px',
-                  }}
-                />
-              </button>
-              
-              {/* Hints */}
-              <div className="flex justify-between">
-                <span className={`text-xs transition-colors ${isLeft ? 'text-[#111]' : 'text-[#ccc]'}`}>
-                  {axis.leftHint}
-                </span>
-                <span className={`text-xs transition-colors ${isRight ? 'text-[#111]' : 'text-[#ccc]'}`}>
-                  {axis.rightHint}
-                </span>
+                
+                {/* Left Segment */}
+                <button
+                  type="button"
+                  onClick={() => handleToggle(i, 0)}
+                  className="relative z-10 flex-1 flex flex-col items-center justify-center"
+                >
+                  <span className={`text-xs font-medium transition-colors ${
+                    isLeft ? 'text-[#fff]' : 'text-[#999]'
+                  }`}>
+                    {axis.leftLetter}
+                  </span>
+                  <span className={`text-[10px] transition-colors ${
+                    isLeft ? 'text-[#ccc]' : 'text-[#bbb]'
+                  }`}>
+                    {axis.left}
+                  </span>
+                </button>
+                
+                {/* Right Segment */}
+                <button
+                  type="button"
+                  onClick={() => handleToggle(i, 1)}
+                  className="relative z-10 flex-1 flex flex-col items-center justify-center"
+                >
+                  <span className={`text-xs font-medium transition-colors ${
+                    isRight ? 'text-[#fff]' : 'text-[#999]'
+                  }`}>
+                    {axis.rightLetter}
+                  </span>
+                  <span className={`text-[10px] transition-colors ${
+                    isRight ? 'text-[#ccc]' : 'text-[#bbb]'
+                  }`}>
+                    {axis.right}
+                  </span>
+                </button>
               </div>
+              
+              {/* Hint */}
+              <p className="text-[10px] text-[#999] text-center">
+                {isLeft ? axis.leftHint : axis.rightHint}
+              </p>
             </div>
           );
         })}
@@ -222,7 +238,7 @@ export function StepCalibration({ formData, updateFormData, onNext, onBack }: St
       <div className="flex gap-4">
         <button 
           onClick={onBack} 
-          className="px-8 py- tracking-widest4 text-sm uppercase border border-[#ddd] hover:border-[#111] transition-all"
+          className="px-8 py-3 text-sm uppercase tracking-widest border border-[#ddd] hover:border-[#111] transition-all"
         >
           Back
         </button>
@@ -231,7 +247,7 @@ export function StepCalibration({ formData, updateFormData, onNext, onBack }: St
             updateFormData({ understanding: { mbti: mbtiCode } }); 
             onNext(); 
           }} 
-          className="px-8 py-4 text-sm uppercase tracking-widest bg-[#111] text-[#fff] hover:bg-[#333] transition-all"
+          className="px-8 py-3 text-sm uppercase tracking-widest bg-[#111] text-[#fff] hover:bg-[#333] transition-all"
         >
           Continue
         </button>
