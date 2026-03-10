@@ -1011,18 +1011,20 @@ interface SummaryViewProps {
 }
 
 function SummaryView({ user }: SummaryViewProps) {
-  const name = user.understanding.name || "User";
-  const persona = user.understanding.preferredAgentPersona;
-  const fixedSlotsCount = user.lifeStructure.fixedActivities.reduce((count, activity) => {
-    if (activity.activityType === "strictlyFixed" && activity.slots) {
+  const name = user?.understanding?.name || "User";
+  const persona = user?.understanding?.preferredAgentPersona || AgentPersona.DevotedSecretary;
+  
+  // Safely calculate fixed slots count
+  const fixedSlotsCount = (user?.lifeStructure?.fixedActivities || []).reduce((count, activity) => {
+    if (activity?.activityType === "strictlyFixed" && activity?.slots && Array.isArray(activity.slots)) {
       return count + activity.slots.length;
     }
     return count;
   }, 0);
   
   // Find flexible activities
-  const flexibleActivities = user.lifeStructure.fixedActivities.filter(
-    activity => activity.activityType === "flexibleFloating"
+  const flexibleActivities = (user?.lifeStructure?.fixedActivities || []).filter(
+    activity => activity?.activityType === "flexibleFloating"
   );
   
   const personaInfo = {
@@ -1039,11 +1041,11 @@ function SummaryView({ user }: SummaryViewProps) {
   const currentPersona = personaInfo[persona];
   
   // Determine pressure sensitivity label
-  const pressureSensitivity = user.understanding.pressureSensitivity;
+  const pressureSensitivity = user?.understanding?.pressureSensitivity ?? 5;
   const pressureLabel = pressureSensitivity <= 3 ? "High" : pressureSensitivity <= 6 ? "Medium" : "Low";
   
   // Determine planning style
-  const planningStyle = user.understanding.planningStyle;
+  const planningStyle = user?.understanding?.planningStyle || "Structured";
   
   return (
     <motion.div
@@ -1070,7 +1072,7 @@ function SummaryView({ user }: SummaryViewProps) {
           <div className="space-y-2">
             <div className="flex justify-between">
               <span className="text-sm text-[#666]">MBTI</span>
-              <span className="text-sm font-mono">{user.understanding.mbti}</span>
+              <span className="text-sm font-mono">{user?.understanding?.mbti || "Unknown"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-[#666]">Pressure Sensitivity</span>
@@ -1094,12 +1096,12 @@ function SummaryView({ user }: SummaryViewProps) {
             <div className="flex justify-between">
               <span className="text-sm text-[#666]">Focus Peaks</span>
               <span className="text-sm font-mono">
-                {user.understanding.biologicalClock.focusPeaks.length} periods
+                {(user?.understanding?.biologicalClock?.focusPeaks || []).length} periods
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-[#666]">Life Mode</span>
-              <span className="text-sm font-mono">{user.understanding.lifeState.mode}</span>
+              <span className="text-sm font-mono">{user?.understanding?.lifeState?.mode || "Normal"}</span>
             </div>
           </div>
         </div>
