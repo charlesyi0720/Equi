@@ -350,18 +350,19 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
 
   const addSlot = (activityIndex: number, day: Weekday) => {
     const activity = formData.fixedActivities[activityIndex];
+    const activitySlots = activity.slots || [];
     const newSlot: ActivitySlot = { day, startHour: 9, endHour: 10, startMinute: 0, endMinute: 0 };
-    updateActivity(activityIndex, "slots", [...activity.slots, newSlot]);
+    updateActivity(activityIndex, "slots", [...activitySlots, newSlot]);
   };
 
   const removeSlot = (activityIndex: number, day: Weekday) => {
     const activity = formData.fixedActivities[activityIndex];
-    updateActivity(activityIndex, "slots", activity.slots.filter((s) => s.day !== day));
+    updateActivity(activityIndex, "slots", (activity.slots || []).filter((s) => s.day !== day));
   };
 
   const updateSlot = (activityIndex: number, day: Weekday, field: "startHour" | "endHour" | "startMinute" | "endMinute", value: number) => {
     const activity = formData.fixedActivities[activityIndex];
-    const updatedSlots = activity.slots.map((s) =>
+    const updatedSlots = (activity.slots || []).map((s) =>
       s.day === day ? { ...s, [field]: value } : s
     );
     updateActivity(activityIndex, "slots", updatedSlots);
@@ -371,7 +372,7 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
     formData.fixedActivities.length > 0 &&
     formData.fixedActivities.every((a) => {
       if (!a.label.trim()) return false;
-      if (a.activityType === "strictlyFixed" && a.slots.length === 0) return false;
+      if (a.activityType === "strictlyFixed" && (a.slots || []).length === 0) return false;
       if (a.activityType === "flexibleFloating" && (!a.flexibleQuota || a.flexibleQuota.dailyMinutes <= 0)) return false;
       return true;
     });
@@ -700,8 +701,9 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
                   <label className="text-xs text-[#666]">Time Slots (one per day)</label>
                   <div className="grid gap-2">
                     {WEEKDAYS.map((day) => {
-                      const isSelected = activity.slots.some((s) => s.day === day);
-                      const slot = activity.slots.find((s) => s.day === day);
+                      const activitySlots = activity.slots || [];
+                      const isSelected = activitySlots.some((s) => s.day === day);
+                      const slot = activitySlots.find((s) => s.day === day);
                       if (!slot) return null;
                       return (
                         <TimeSlotSelector
@@ -716,8 +718,9 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
                   </div>
                   <button
                     onClick={() => {
+                      const activitySlots = activity.slots || [];
                       const availableDays = WEEKDAYS.filter(
-                        (d) => !activity.slots.some((s) => s.day === d)
+                        (d) => !activitySlots.some((s) => s.day === d)
                       );
                       if (availableDays.length > 0) {
                         addSlot(index, availableDays[0]);
