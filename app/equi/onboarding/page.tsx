@@ -102,7 +102,7 @@ export default function EquiOnboarding() {
     // #region agent log
     const fixedActivitiesDebug = formData.fixedActivities.map(fa => ({
       label: fa.label,
-      slots: fa.slots?.map(s => ({ day: s.day, startHour: s?.startHour, endHour: s?.endHour }))
+      slots: fa.slots?.map(s => ({ day: s?.day, startHour: s?.startHour, endHour: s?.endHour }))
     }));
     console.log('[DEBUG] buildEquiUser - formData state at submit:', {
       focusPeaks: formData.focusPeaks,

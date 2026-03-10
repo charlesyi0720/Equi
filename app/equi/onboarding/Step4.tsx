@@ -303,6 +303,10 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
       if (!activity.weekdayPattern.includes(schedule.day)) {
         activity.weekdayPattern.push(schedule.day);
       }
+      // Ensure slots array exists before pushing
+      if (!activity.slots) {
+        activity.slots = [];
+      }
       activity.slots.push({
         day: schedule.day,
         startHour: schedule?.startHour ?? 9,
