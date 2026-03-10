@@ -13,6 +13,7 @@ import {
   PlanningStyle,
 } from "../types";
 import { Step4Structures } from "./Step4";
+import { StepCalibration } from "./StepCalibration";
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -67,11 +68,14 @@ export default function EquiOnboarding() {
     name: "",
     occupation: "",
     preferredTitle: "",
+    // Step 2: Behavioral
     procrastinationAnswer: "",
     pressureAnswer: "",
-    // Step 2: MBTI Behavioral Mixer
+    focusLevel: "",
+    planningStyleAnswer: "",
+    // Step 4: MBTI Calibration
     understanding: {
-      mbti: "INTJ", // Default to INTJ for AI Researcher/Economics honors student
+      mbti: "INTJ",
     },
     focusPeaks: [] as { startHour: number; endHour: number; days: Weekday[] }[],
     energyDips: [] as { startHour: number; endHour: number; days: Weekday[] }[],
@@ -95,7 +99,7 @@ export default function EquiOnboarding() {
     setFormData((prev) => ({ ...prev, ...data }));
   };
 
-  const nextStep = () => setCurrentStep((prev) => Math.min(prev + 1, 6));
+  const nextStep = () => setCurrentStep((prev) => Math.min(prev + 1, 7));
   const prevStep = () => setCurrentStep((prev) => Math.max(prev - 1, 1));
 
   const buildEquiUser = (): EquiUser => {
@@ -249,9 +253,10 @@ export default function EquiOnboarding() {
     { number: 1, label: "Identity" },
     { number: 2, label: "Behavioral" },
     { number: 3, label: "Rhythms" },
-    { number: 4, label: "Structure" },
-    { number: 5, label: "Life Mode" },
-    { number: 6, label: "Persona" },
+    { number: 4, label: "Calibration" },
+    { number: 5, label: "Structure" },
+    { number: 6, label: "Life Mode" },
+    { number: 7, label: "Persona" },
   ];
 
   return (
@@ -322,7 +327,7 @@ export default function EquiOnboarding() {
             />
           )}
           {currentStep === 4 && (
-            <Step4Structures
+            <StepCalibration
               key="step4"
               formData={formData}
               updateFormData={updateFormData}
@@ -331,7 +336,7 @@ export default function EquiOnboarding() {
             />
           )}
           {currentStep === 5 && (
-            <Step5LifeMode
+            <Step4Structures
               key="step5"
               formData={formData}
               updateFormData={updateFormData}
@@ -340,8 +345,17 @@ export default function EquiOnboarding() {
             />
           )}
           {currentStep === 6 && (
-            <Step6Persona
+            <Step5LifeMode
               key="step6"
+              formData={formData}
+              updateFormData={updateFormData}
+              onNext={nextStep}
+              onBack={prevStep}
+            />
+          )}
+          {currentStep === 7 && (
+            <Step6Persona
+              key="step7"
               formData={formData}
               updateFormData={updateFormData}
               onBack={prevStep}
