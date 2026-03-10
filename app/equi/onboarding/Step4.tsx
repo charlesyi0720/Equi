@@ -163,7 +163,7 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
 
       const schedules: ImportedSchedule[] = events.map((e) => {
         // #region agent log
-        fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f336ac'},body:JSON.stringify({sessionId:'f336ac',location:'Step4.tsx:165',message:'Mapping event',data:{label:e?.label,day:e?.day,startHour:e?.startHour,endHour:e?.endHour,startMinute:e?.startMinute,endMinute:e?.endMinute},timestamp:Date.now()})}).catch(()=>{});
+        console.log('[DEBUG] Step4 ICS event:', { label: e?.label, day: e?.day, startHour: e?.startHour, endHour: e?.endHour, startMinute: e?.startMinute, endMinute: e?.endMinute });
         // #endregion
         return {
           id: e.id,
@@ -215,7 +215,7 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
 
       if (result.activities && result.activities.length > 0) {
         // #region agent log
-        fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f336ac'},body:JSON.stringify({sessionId:'f336ac',location:'Step4.tsx:217',message:'Vision API result.activities',data:{count:result.activities.length,first:result.activities[0]},timestamp:Date.now()})}).catch(()=>{});
+        console.log('[DEBUG] Vision API result.activities:', { count: result.activities.length, first: result.activities[0] });
         // #endregion
         const schedules: ImportedSchedule[] = result.activities.map((a: ImportedSchedule) => ({
           id: a.id || generateId(),
@@ -280,7 +280,7 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
 
   const confirmImport = () => {
     // #region agent log
-    fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f336ac'},body:JSON.stringify({sessionId:'f336ac',location:'Step4.tsx:confirmImport',message:'importedSchedules',data:{schedules:importedSchedules},timestamp:Date.now()})}).catch(()=>{});
+    console.log('[DEBUG] Step4 confirmImport - importedSchedules:', importedSchedules);
     // #endregion
     
     // Group by label to create activities

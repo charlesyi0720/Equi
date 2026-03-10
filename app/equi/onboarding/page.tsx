@@ -54,20 +54,7 @@ export default function EquiOnboarding() {
   // Global error handler for debugging
   useEffect(() => {
     const handleError = (event: ErrorEvent) => {
-      const logData = {
-        sessionId: 'f336ac',
-        location: 'window:onerror',
-        message: event.message,
-        filename: event.filename,
-        lineno: event.lineno,
-        colno: event.colno,
-        timestamp: Date.now()
-      };
-      fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f336ac' },
-        body: JSON.stringify(logData)
-      }).catch(() => {});
+      console.error('[DEBUG] Uncaught error:', event.message, 'at', event.filename, 'line', event.lineno);
     };
     window.addEventListener('error', handleError);
     return () => window.removeEventListener('error', handleError);
@@ -113,7 +100,15 @@ export default function EquiOnboarding() {
     const pressureSensitivity = mapPressureToIndex(formData.pressureAnswer);
     
     // #region agent log
-    fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f336ac'},body:JSON.stringify({sessionId:'f336ac',location:'page.tsx:buildEquiUser',message:'formData state at submit',data:{focusPeaks:formData.focusPeaks,energyDips:formData.energyDips,fixedActivities:formData.fixedActivities.map(fa=>({label:fa.label,slots:fa.slots?.map(s=>({day:s.day,startHour:s.startHour,endHour:s.endHour}))}))},timestamp:Date.now()})}).catch(()=>{});
+    const fixedActivitiesDebug = formData.fixedActivities.map(fa => ({
+      label: fa.label,
+      slots: fa.slots?.map(s => ({ day: s.day, startHour: s?.startHour, endHour: s?.endHour }))
+    }));
+    console.log('[DEBUG] buildEquiUser - formData state at submit:', {
+      focusPeaks: formData.focusPeaks,
+      energyDips: formData.energyDips,
+      fixedActivities: fixedActivitiesDebug
+    });
     // #endregion
 
     const focusPeaksFormatted = formData.focusPeaks.flatMap((peak) =>
