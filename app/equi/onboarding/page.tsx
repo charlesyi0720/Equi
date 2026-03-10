@@ -69,6 +69,10 @@ export default function EquiOnboarding() {
     preferredTitle: "",
     procrastinationAnswer: "",
     pressureAnswer: "",
+    // Step 2: MBTI Behavioral Mixer
+    understanding: {
+      mbti: "INTJ", // Default to INTJ for AI Researcher/Economics honors student
+    },
     focusPeaks: [] as { startHour: number; endHour: number; days: Weekday[] }[],
     energyDips: [] as { startHour: number; endHour: number; days: Weekday[] }[],
     fixedActivities: [] as {
@@ -135,7 +139,7 @@ export default function EquiOnboarding() {
         name: formData.name,
         occupation: formData.occupation,
         preferredTitle: formData.preferredTitle,
-        mbti: "Unknown",
+        mbti: formData.understanding?.mbti || "INTJ",
         planningStyle: procrastinationIndex <= 5 ? PlanningStyle.Structured : PlanningStyle.Flexible,
         procrastinationIndex,
         pressureSensitivity,
@@ -222,9 +226,13 @@ export default function EquiOnboarding() {
       
       console.log("FINAL DATA TO BE SAVED:", finalData);
       
-      // Save to localStorage
+      // Save EquiUser to localStorage
       localStorage.setItem("EQUI_USER_DATA", JSON.stringify(finalData));
       console.log("User data saved to localStorage");
+      
+      // Also save the raw formData for future edits
+      localStorage.setItem("EQUI_FORM_DATA", JSON.stringify(formData));
+      console.log("Form data saved to localStorage for edits");
       
       // Set submitted state to show summary view
       setSubmittedUser(finalData);
@@ -425,34 +433,132 @@ function Step1Identity({ formData, updateFormData, onNext }: Step1IdentityProps)
 }
 
 // ============================================================================
-// STEP 2: BEHAVIORAL INQUIRY
+// STEP 2: MBTI BEHAVIORAL MIXER
 // ============================================================================
 
 interface Step2BehavioralProps {
-  formData: { procrastinationAnswer: string; pressureAnswer: string };
-  updateFormData: (data: Partial<{ procrastinationAnswer: string; pressureAnswer: string }>) => void;
+  formData: {
+    understanding: { mbti: string };
+    procrastinationAnswer: string;
+    pressureAnswer: string;
+  };
+  updateFormData: (data: Partial<{
+    understanding: { mbti: string };
+    procrastinationAnswer: string;
+    pressureAnswer: string;
+  }>) => void;
   onNext: () => void;
   onBack: () => void;
 }
 
-const PROCRASTINATION_OPTIONS = [
-  { value: "immediately", label: "I handle it immediately", description: "No delay, straight to action" },
-  { value: "same-day", label: "Same day", description: "Done when the day is young" },
-  { value: "within-days", label: "Within a few days", description: "Not urgent, but on my list" },
-  { value: "night-before", label: "Night before", description: "Classic approach" },
-  { value: "last-minute", label: "Last possible moment", description: "Adrenaline is my fuel" },
+// MBTI trait descriptions
+const MBTI_DESCRIPTIONS: Record<string, string> = {
+  "INTJ": "The Strategic Architect",
+  "INTP": "The Logical Architect",
+  "ENTJ": "The Commander",
+  "ENTP": "The Debater",
+  "INFJ": "The Advocate",
+  "INFP": "The Mediator",
+  "ENFJ": "The Protagonist",
+  "ENFP": "The Campaigner",
+  "ISTJ": "The Logistician",
+  "ISFJ": "The Defender",
+  "ESTJ": "The Executive",
+  "ESFJ": "The Consul",
+  "ISTP": "The Virtuoso",
+  "ISFP": "The Adventurer",
+  "ESTP": "The Entrepreneur",
+  "ESFP": "The Entertainer",
+};
+
+interface AxisConfig {
+  key: string;
+  leftLabel: string;
+  rightLabel: string;
+  leftHint: string;
+  rightHint: string;
+}
+
+const MBTI_AXIS_MAP = {
+  // Axis 1: E/I
+  I: { position: 0, letter: "I" },
+  E: { position: 1, letter: "E" },
+  // Axis 2: N/S
+  N: { position: 0, letter: "N" },
+  S: { position: 1, letter: "S" },
+  // Axis 3: T/F
+  T: { position: 0, letter: "T" },
+  F: { position: 1, letter: "F" },
+  // Axis 4: J/P
+  J: { position: 0, letter: "J" },
+  P: { position: 1, letter: "P" },
+} as const;
+
+const AXES: AxisConfig[] = [
+  {
+    key: "energy",
+    leftLabel: "Introvert (I)",
+    rightLabel: "Extrovert (E)",
+    leftHint: "Deep internal focus",
+    rightHint: "Active external interaction",
+  },
+  {
+    key: "information",
+    leftLabel: "Intuitive (N)",
+    rightLabel: "Sensing (S)",
+    leftHint: "Patterns and possibilities",
+    rightHint: "Concrete facts and details",
+  },
+  {
+    key: "decision",
+    leftLabel: "Thinking (T)",
+    rightLabel: "Feeling (F)",
+    leftHint: "Logic and objective consistency",
+    rightHint: "People and value priorities",
+  },
+  {
+    key: "lifestyle",
+    leftLabel: "Judging (J)",
+    rightLabel: "Perceiving (P)",
+    leftHint: "Organized and planned",
+    rightHint: "Flexible and spontaneous",
+  },
 ];
 
-const PRESSURE_OPTIONS = [
-  { value: "paralyzed", label: "I freeze", description: "Deadlines make me unable to act" },
-  { value: "uncomfortable", label: "Uncomfortable", description: "I work worse under pressure" },
-  { value: "neutral", label: "Neutral", description: "Pressure doesn't affect my output" },
-  { value: "motivated", label: "Motivated", description: "It pushes me to deliver" },
-  { value: "thrive", label: "I thrive", description: "I do my best work at the last minute" },
-];
+function getMBTICode(axes: number[]): string {
+  const letters = ["I", "E", "N", "S", "T", "F", "J", "P"];
+  return axes.map((val, i) => val === 0 ? letters[i * 2] : letters[i * 2 + 1]).join("");
+}
 
 function Step2Behavioral({ formData, updateFormData, onNext, onBack }: Step2BehavioralProps) {
-  const isValid = formData.procrastinationAnswer && formData.pressureAnswer;
+  // Parse current MBTI into axis values (0 = left, 1 = right)
+  const currentMbti = formData.understanding?.mbti || "INTJ";
+  const [axisValues, setAxisValues] = useState(() => {
+    const getPosition = (letter: string, evenIndex: boolean): number => {
+      const idx = evenIndex ? 0 : 1;
+      return currentMbti[idx] === letter ? 0 : 1;
+    };
+    return [
+      getPosition("I", true),  // Energy: I(0) or E(1)
+      getPosition("N", true),  // Information: N(0) or S(1)
+      getPosition("T", true),  // Decision: T(0) or F(1)
+      getPosition("J", true),  // Lifestyle: J(0) or P(1)
+    ];
+  });
+
+  const mbtiCode = getMBTICode(axisValues);
+  const traitDescription = MBTI_DESCRIPTIONS[mbtiCode] || "Unknown";
+
+  // Update formData when MBTI changes
+  useEffect(() => {
+    updateFormData({ understanding: { mbti: mbtiCode } });
+  }, [mbtiCode]);
+
+  const handleAxisChange = (index: number, value: number) => {
+    const newAxes = [...axisValues];
+    newAxes[index] = value;
+    setAxisValues(newAxes);
+  };
 
   return (
     <motion.div
@@ -462,32 +568,73 @@ function Step2Behavioral({ formData, updateFormData, onNext, onBack }: Step2Beha
       className="space-y-10"
     >
       <div className="space-y-2">
-        <h2 className="text-3xl font-light text-[#111] tracking-tight">Understand your patterns.</h2>
-        <p className="text-[#666] text-sm">These answers calibrate how Equi supports you.</p>
+        <h2 className="text-3xl font-light text-[#111] tracking-tight">Calibrate your behavioral profile.</h2>
+        <p className="text-[#666] text-sm">Fine-tune how Equi interacts with you.</p>
       </div>
 
+      {/* MBTI Code Display */}
+      <div className="border border-[#111] p-6">
+        <div className="flex items-center justify-between mb-4">
+          <span className="text-xs uppercase tracking-widest text-[#666]">Your Profile</span>
+          <span className="text-4xl font-light tracking-[0.2em]">{mbtiCode}</span>
+        </div>
+        <p className="text-sm text-[#111] border-t border-[#ddd] pt-4">{traitDescription}</p>
+      </div>
+
+      {/* 4-Axis Mixer */}
       <div className="space-y-8">
+        {AXES.map((axis, index) => (
+          <div key={axis.key} className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs uppercase tracking-widest text-[#111]">{axis.leftLabel}</span>
+              <span className="text-xs uppercase tracking-widest text-[#111]">{axis.rightLabel}</span>
+            </div>
+            
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="1"
+              value={axisValues[index]}
+              onChange={(e) => handleAxisChange(index, Number(e.target.value))}
+              className="w-full h-1 bg-[#ddd] appearance-none cursor-pointer slider-thin"
+              style={{
+                background: `linear-gradient(to right, #111 ${axisValues[index] * 50}%, #ddd ${axisValues[index] * 50}%)`,
+              }}
+            />
+            
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-[#999]">{axis.leftHint}</span>
+              <span className="text-xs text-[#999]">{axis.rightHint}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Legacy Questions - Still needed for procrastination/pressure */}
+      <div className="space-y-6 pt-6 border-t border-[#ddd]">
         <div className="space-y-4">
           <label className="text-xs uppercase tracking-widest text-[#111] font-medium">
             When faced with a complex administrative task, what is your typical approach?
           </label>
-          <div className="grid gap-3">
-            {PROCRASTINATION_OPTIONS.map((option) => (
+          <div className="grid grid-cols-1 gap-2">
+            {[
+              { value: "immediately", label: "Immediately" },
+              { value: "same-day", label: "Same day" },
+              { value: "within-days", label: "Within a few days" },
+              { value: "night-before", label: "Night before" },
+              { value: "last-minute", label: "Last possible moment" },
+            ].map((option) => (
               <button
                 key={option.value}
                 onClick={() => updateFormData({ procrastinationAnswer: option.value })}
-                className={`text-left p-4 border transition-all ${
+                className={`text-left p-3 text-sm border transition-all ${
                   formData.procrastinationAnswer === option.value
                     ? "border-[#111] bg-[#111] text-[#fff]"
                     : "border-[#ddd] hover:border-[#111]"
                 }`}
               >
-                <div className="font-medium">{option.label}</div>
-                <div className={`text-xs mt-1 ${
-                  formData.procrastinationAnswer === option.value ? "text-[#ccc]" : "text-[#666]"
-                }`}>
-                  {option.description}
-                </div>
+                {option.label}
               </button>
             ))}
           </div>
@@ -497,23 +644,24 @@ function Step2Behavioral({ formData, updateFormData, onNext, onBack }: Step2Beha
           <label className="text-xs uppercase tracking-widest text-[#111] font-medium">
             How does your productivity change as a deadline approaches?
           </label>
-          <div className="grid gap-3">
-            {PRESSURE_OPTIONS.map((option) => (
+          <div className="grid grid-cols-1 gap-2">
+            {[
+              { value: "paralyzed", label: "I freeze" },
+              { value: "uncomfortable", label: "Uncomfortable" },
+              { value: "neutral", label: "Neutral" },
+              { value: "motivated", label: "Motivated" },
+              { value: "thrive", label: "I thrive" },
+            ].map((option) => (
               <button
                 key={option.value}
                 onClick={() => updateFormData({ pressureAnswer: option.value })}
-                className={`text-left p-4 border transition-all ${
+                className={`text-left p-3 text-sm border transition-all ${
                   formData.pressureAnswer === option.value
                     ? "border-[#111] bg-[#111] text-[#fff]"
                     : "border-[#ddd] hover:border-[#111]"
                 }`}
               >
-                <div className="font-medium">{option.label}</div>
-                <div className={`text-xs mt-1 ${
-                  formData.pressureAnswer === option.value ? "text-[#ccc]" : "text-[#666]"
-                }`}>
-                  {option.description}
-                </div>
+                {option.label}
               </button>
             ))}
           </div>
@@ -529,16 +677,34 @@ function Step2Behavioral({ formData, updateFormData, onNext, onBack }: Step2Beha
         </button>
         <button
           onClick={onNext}
-          disabled={!isValid}
-          className={`px-8 py-4 text-sm uppercase tracking-widest transition-all ${
-            isValid 
-              ? "bg-[#111] text-[#fff] hover:bg-[#333]" 
-              : "bg-[#eee] text-[#999] cursor-not-allowed"
-          }`}
+          className="px-8 py-4 text-sm uppercase tracking-widest bg-[#111] text-[#fff] hover:bg-[#333] transition-all"
         >
           Continue
         </button>
       </div>
+
+      <style jsx global>{`
+        .slider-thin::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+          background: #111;
+          cursor: pointer;
+          border: 2px solid #fff;
+          box-shadow: 0 0 0 1px #111;
+        }
+        .slider-thin::-moz-range-thumb {
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+          background: #111;
+          cursor: pointer;
+          border: 2px solid #fff;
+          box-shadow: 0 0 0 1px #111;
+        }
+      `}</style>
     </motion.div>
   );
 }
