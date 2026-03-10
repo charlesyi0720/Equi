@@ -279,6 +279,10 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
   };
 
   const confirmImport = () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f336ac'},body:JSON.stringify({sessionId:'f336ac',location:'Step4.tsx:confirmImport',message:'importedSchedules',data:{schedules:importedSchedules},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    
     // Group by label to create activities
     const activityMap = new Map<string, ActivityForm>();
     

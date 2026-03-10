@@ -51,6 +51,28 @@ function generateId(): string {
 // ============================================================================
 
 export default function EquiOnboarding() {
+  // Global error handler for debugging
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      const logData = {
+        sessionId: 'f336ac',
+        location: 'window:onerror',
+        message: event.message,
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+        timestamp: Date.now()
+      };
+      fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f336ac' },
+        body: JSON.stringify(logData)
+      }).catch(() => {});
+    };
+    window.addEventListener('error', handleError);
+    return () => window.removeEventListener('error', handleError);
+  }, []);
+  
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submittedUser, setSubmittedUser] = useState<EquiUser | null>(null);
@@ -91,7 +113,7 @@ export default function EquiOnboarding() {
     const pressureSensitivity = mapPressureToIndex(formData.pressureAnswer);
     
     // #region agent log
-    fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f336ac'},body:JSON.stringify({sessionId:'f336ac',location:'page.tsx:91',message:'formData.focusPeaks',data:{focusPeaks:formData.focusPeaks,energyDips:formData.energyDips},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f336ac'},body:JSON.stringify({sessionId:'f336ac',location:'page.tsx:buildEquiUser',message:'formData state at submit',data:{focusPeaks:formData.focusPeaks,energyDips:formData.energyDips,fixedActivities:formData.fixedActivities.map(fa=>({label:fa.label,slots:fa.slots?.map(s=>({day:s.day,startHour:s.startHour,endHour:s.endHour}))}))},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
 
     const focusPeaksFormatted = formData.focusPeaks.flatMap((peak) =>
