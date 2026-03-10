@@ -68,11 +68,11 @@ export default function EquiOnboarding() {
     name: "",
     occupation: "",
     preferredTitle: "",
-    // Step 2: Behavioral
-    procrastinationAnswer: "",
-    pressureAnswer: "",
+    // Step 2: Behavioral Habits
     focusLevel: "",
     planningStyleAnswer: "",
+    procrastinationAnswer: "",
+    pressureAnswer: "",
     // Step 4: MBTI Calibration
     understanding: {
       mbti: "INTJ",
@@ -253,7 +253,7 @@ export default function EquiOnboarding() {
     { number: 1, label: "Identity" },
     { number: 2, label: "Behavioral" },
     { number: 3, label: "Rhythms" },
-    { number: 4, label: "Calibration" },
+    { number: 4, label: "Reveal" },
     { number: 5, label: "Structure" },
     { number: 6, label: "Life Mode" },
     { number: 7, label: "Persona" },
@@ -447,17 +447,19 @@ function Step1Identity({ formData, updateFormData, onNext }: Step1IdentityProps)
 }
 
 // ============================================================================
-// STEP 2: MBTI BEHAVIORAL MIXER
+// STEP 2: BEHAVIORAL HABITS (No MBTI terms)
 // ============================================================================
 
 interface Step2BehavioralProps {
   formData: {
-    understanding: { mbti: string };
+    focusLevel: string;
+    planningStyleAnswer: string;
     procrastinationAnswer: string;
     pressureAnswer: string;
   };
   updateFormData: (data: Partial<{
-    understanding: { mbti: string };
+    focusLevel: string;
+    planningStyleAnswer: string;
     procrastinationAnswer: string;
     pressureAnswer: string;
   }>) => void;
@@ -465,125 +467,8 @@ interface Step2BehavioralProps {
   onBack: () => void;
 }
 
-// MBTI trait descriptions
-const MBTI_DESCRIPTIONS: Record<string, string> = {
-  "INTJ": "The Strategic Architect",
-  "INTP": "The Logical Architect",
-  "ENTJ": "The Commander",
-  "ENTP": "The Debater",
-  "INFJ": "The Advocate",
-  "INFP": "The Mediator",
-  "ENFJ": "The Protagonist",
-  "ENFP": "The Campaigner",
-  "ISTJ": "The Logistician",
-  "ISFJ": "The Defender",
-  "ESTJ": "The Executive",
-  "ESFJ": "The Consul",
-  "ISTP": "The Virtuoso",
-  "ISFP": "The Adventurer",
-  "ESTP": "The Entrepreneur",
-  "ESFP": "The Entertainer",
-};
-
-interface AxisConfig {
-  key: string;
-  leftLabel: string;
-  rightLabel: string;
-  leftHint: string;
-  rightHint: string;
-}
-
-const MBTI_AXIS_MAP = {
-  // Axis 1: E/I
-  I: { position: 0, letter: "I" },
-  E: { position: 1, letter: "E" },
-  // Axis 2: N/S
-  N: { position: 0, letter: "N" },
-  S: { position: 1, letter: "S" },
-  // Axis 3: T/F
-  T: { position: 0, letter: "T" },
-  F: { position: 1, letter: "F" },
-  // Axis 4: J/P
-  J: { position: 0, letter: "J" },
-  P: { position: 1, letter: "P" },
-} as const;
-
-const AXES: AxisConfig[] = [
-  {
-    key: "energy",
-    leftLabel: "Introvert (I)",
-    rightLabel: "Extrovert (E)",
-    leftHint: "Deep internal focus",
-    rightHint: "Active external interaction",
-  },
-  {
-    key: "information",
-    leftLabel: "Intuitive (N)",
-    rightLabel: "Sensing (S)",
-    leftHint: "Patterns and possibilities",
-    rightHint: "Concrete facts and details",
-  },
-  {
-    key: "decision",
-    leftLabel: "Thinking (T)",
-    rightLabel: "Feeling (F)",
-    leftHint: "Logic and objective consistency",
-    rightHint: "People and value priorities",
-  },
-  {
-    key: "lifestyle",
-    leftLabel: "Judging (J)",
-    rightLabel: "Perceiving (P)",
-    leftHint: "Organized and planned",
-    rightHint: "Flexible and spontaneous",
-  },
-];
-
-function getMBTICode(axes: number[]): string {
-  // Use threshold of 50: < 50 = left letter, >= 50 = right letter
-  const letters = ["I", "E", "N", "S", "T", "F", "J", "P"];
-  return axes.map((val, i) => val >= 50 ? letters[i * 2 + 1] : letters[i * 2]).join("");
-}
-
 function Step2Behavioral({ formData, updateFormData, onNext, onBack }: Step2BehavioralProps) {
-  // Parse current MBTI into axis values (0-100, default 0 = left letter)
-  const currentMbti = formData.understanding?.mbti || "INTJ";
-  
-  // Map MBTI letter to axis position (0-100)
-  const getAxisValue = (letter: string, axisIndex: number): number => {
-    const leftLetters = ["I", "N", "T", "J"]; // Left side letters for each axis
-    const rightLetters = ["E", "S", "F", "P"];
-    return leftLetters.includes(letter) ? 0 : 100;
-  };
-  
-  const [axisValues, setAxisValues] = useState<number[]>([
-    getAxisValue(currentMbti[0], 0),  // Energy: I or E
-    getAxisValue(currentMbti[1], 1),  // Information: N or S
-    getAxisValue(currentMbti[2], 2),  // Decision: T or F
-    getAxisValue(currentMbti[3], 3),  // Lifestyle: J or P
-  ]);
-
-  const mbtiCode = getMBTICode(axisValues);
-  const traitDescription = MBTI_DESCRIPTIONS[mbtiCode] || "Unknown";
-
-  // Update formData when MBTI changes
-  useEffect(() => {
-    updateFormData({ understanding: { mbti: mbtiCode } });
-  }, [mbtiCode]);
-
-  const handleAxisChange = (index: number, value: number) => {
-    const newAxes = [...axisValues];
-    newAxes[index] = value;
-    setAxisValues(newAxes);
-  };
-
-  const handleAxisChangeEnd = (index: number, value: number) => {
-    // Snap to 0 or 100 on release
-    const snappedValue = value >= 50 ? 100 : 0;
-    const newAxes = [...axisValues];
-    newAxes[index] = snappedValue;
-    setAxisValues(newAxes);
-  };
+  const isValid = formData.procrastinationAnswer && formData.pressureAnswer && formData.focusLevel && formData.planningStyleAnswer;
 
   return (
     <motion.div
@@ -593,118 +478,124 @@ function Step2Behavioral({ formData, updateFormData, onNext, onBack }: Step2Beha
       className="space-y-10"
     >
       <div className="space-y-2">
-        <h2 className="text-3xl font-light text-[#111] tracking-tight">Calibrate your behavioral profile.</h2>
-        <p className="text-[#666] text-sm">Fine-tune how Equi interacts with you.</p>
+        <h2 className="text-3xl font-light text-[#111] tracking-tight">Understand your work style.</h2>
+        <p className="text-[#666] text-sm">These behavioral signals help Equi adapt to you.</p>
       </div>
 
-      {/* MBTI Code Display */}
-      <div className="border border-[#111] p-6">
-        <div className="flex items-center justify-between mb-4">
-          <span className="text-xs uppercase tracking-widest text-[#666]">Your Profile</span>
-          <span className="text-4xl font-light tracking-[0.2em]">{mbtiCode}</span>
-        </div>
-        <p className="text-sm text-[#111] border-t border-[#ddd] pt-4">{traitDescription}</p>
-      </div>
-
-      {/* 4-Axis Mixer */}
-      <div className="space-y-8">
-        {AXES.map((axis, index) => {
-          const value = axisValues[index];
-          const isLeftActive = value < 50;
-          const isRightActive = value >= 50;
-          const leftLabelClass = isLeftActive ? "text-[#111] font-semibold" : "text-[#999]";
-          const rightLabelClass = isRightActive ? "text-[#111] font-semibold" : "text-[#999]";
-          const leftHintClass = isLeftActive ? "text-[#111]" : "text-[#ccc]";
-          const rightHintClass = isRightActive ? "text-[#111]" : "text-[#ccc]";
-          
-          return (
-            <div key={axis.key} className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className={`text-xs uppercase tracking-widest transition-colors ${leftLabelClass}`}>{axis.leftLabel}</span>
-                <span className={`text-xs uppercase tracking-widest transition-colors ${rightLabelClass}`}>{axis.rightLabel}</span>
+      {/* Question 1: Focus Level */}
+      <div className="space-y-4">
+        <label className="text-xs uppercase tracking-widest text-[#111] font-medium">
+          When do you do your best thinking?
+        </label>
+        <div className="grid grid-cols-1 gap-2">
+          {[
+            { value: "deep", label: "Deep in concentration", description: "Long uninterrupted blocks of focus" },
+            { value: "flexible", label: "In bursts", description: "Short sprints with frequent breaks" },
+            { value: "varied", label: "It varies", description: "Depends on the task and energy" },
+          ].map((option) => (
+            <button
+              key={option.value}
+              onClick={() => updateFormData({ focusLevel: option.value })}
+              className={`text-left p-4 border transition-all ${
+                formData.focusLevel === option.value
+                  ? "border-[#111] bg-[#111] text-[#fff]"
+                  : "border-[#ddd] hover:border-[#111]"
+              }`}
+            >
+              <div className="font-medium">{option.label}</div>
+              <div className={`text-xs mt-1 ${
+                formData.focusLevel === option.value ? "text-[#ccc]" : "text-[#666]"
+              }`}>
+                {option.description}
               </div>
-              
-              <input
-                type="range"
-                min="0"
-                max="100"
-                step="1"
-                value={value}
-                onChange={(e) => handleAxisChange(index, Number(e.target.value))}
-                onMouseUp={(e) => handleAxisChangeEnd(index, Number((e.target as HTMLInputElement).value))}
-                onTouchEnd={(e) => {
-                  const input = e.target as HTMLInputElement;
-                  handleAxisChangeEnd(index, Number(input.value));
-                }}
-                className="w-full h-2 bg-transparent cursor-pointer slider-rail"
-                style={{
-                  background: `linear-gradient(to right, #111 0%, #111 ${value}%, #ddd ${value}%, #ddd 100%)`,
-                }}
-              />
-              
-              <div className="flex items-center justify-between">
-                <span className={`text-xs transition-colors ${leftHintClass}`}>{axis.leftHint}</span>
-                <span className={`text-xs transition-colors ${rightHintClass}`}>{axis.rightHint}</span>
-              </div>
-            </div>
-          );
-        })}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Legacy Questions - Still needed for procrastination/pressure */}
-      <div className="space-y-6 pt-6 border-t border-[#ddd]">
-        <div className="space-y-4">
-          <label className="text-xs uppercase tracking-widest text-[#111] font-medium">
-            When faced with a complex administrative task, what is your typical approach?
-          </label>
-          <div className="grid grid-cols-1 gap-2">
-            {[
-              { value: "immediately", label: "Immediately" },
-              { value: "same-day", label: "Same day" },
-              { value: "within-days", label: "Within a few days" },
-              { value: "night-before", label: "Night before" },
-              { value: "last-minute", label: "Last possible moment" },
-            ].map((option) => (
-              <button
-                key={option.value}
-                onClick={() => updateFormData({ procrastinationAnswer: option.value })}
-                className={`text-left p-3 text-sm border transition-all ${
-                  formData.procrastinationAnswer === option.value
-                    ? "border-[#111] bg-[#111] text-[#fff]"
-                    : "border-[#ddd] hover:border-[#111]"
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+      {/* Question 2: Planning Style */}
+      <div className="space-y-4">
+        <label className="text-xs uppercase tracking-widest text-[#111] font-medium">
+          How do you prefer to plan your tasks?
+        </label>
+        <div className="grid grid-cols-1 gap-2">
+          {[
+            { value: "structured", label: "Plan ahead", description: "Schedule everything in advance" },
+            { value: "spontaneous", label: "Go with the flow", description: "Decide as I go" },
+          ].map((option) => (
+            <button
+              key={option.value}
+              onClick={() => updateFormData({ planningStyleAnswer: option.value })}
+              className={`text-left p-4 border transition-all ${
+                formData.planningStyleAnswer === option.value
+                  ? "border-[#111] bg-[#111] text-[#fff]"
+                  : "border-[#ddd] hover:border-[#111]"
+              }`}
+            >
+              <div className="font-medium">{option.label}</div>
+              <div className={`text-xs mt-1 ${
+                formData.planningStyleAnswer === option.value ? "text-[#ccc]" : "text-[#666]"
+              }`}>
+                {option.description}
+              </div>
+            </button>
+          ))}
         </div>
+      </div>
 
-        <div className="space-y-4">
-          <label className="text-xs uppercase tracking-widest text-[#111] font-medium">
-            How does your productivity change as a deadline approaches?
-          </label>
-          <div className="grid grid-cols-1 gap-2">
-            {[
-              { value: "paralyzed", label: "I freeze" },
-              { value: "uncomfortable", label: "Uncomfortable" },
-              { value: "neutral", label: "Neutral" },
-              { value: "motivated", label: "Motivated" },
-              { value: "thrive", label: "I thrive" },
-            ].map((option) => (
-              <button
-                key={option.value}
-                onClick={() => updateFormData({ pressureAnswer: option.value })}
-                className={`text-left p-3 text-sm border transition-all ${
-                  formData.pressureAnswer === option.value
-                    ? "border-[#111] bg-[#111] text-[#fff]"
-                    : "border-[#ddd] hover:border-[#111]"
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+      {/* Question 3: Procrastination */}
+      <div className="space-y-4">
+        <label className="text-xs uppercase tracking-widest text-[#111] font-medium">
+          When faced with a complex administrative task, what is your typical approach?
+        </label>
+        <div className="grid grid-cols-1 gap-2">
+          {[
+            { value: "immediately", label: "Get it done immediately" },
+            { value: "same-day", label: "Same day" },
+            { value: "within-days", label: "Within a few days" },
+            { value: "night-before", label: "Night before deadline" },
+            { value: "last-minute", label: "Last possible moment" },
+          ].map((option) => (
+            <button
+              key={option.value}
+              onClick={() => updateFormData({ procrastinationAnswer: option.value })}
+              className={`text-left p-3 text-sm border transition-all ${
+                formData.procrastinationAnswer === option.value
+                  ? "border-[#111] bg-[#111] text-[#fff]"
+                  : "border-[#ddd] hover:border-[#111]"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Question 4: Pressure Response */}
+      <div className="space-y-4">
+        <label className="text-xs uppercase tracking-widest text-[#111] font-medium">
+          How does your productivity change as a deadline approaches?
+        </label>
+        <div className="grid grid-cols-1 gap-2">
+          {[
+            { value: "paralyzed", label: "I freeze up", description: "Pressure makes it harder" },
+            { value: "uncomfortable", label: "Uncomfortable", description: "Still functional but stressed" },
+            { value: "neutral", label: "Neutral", description: "No significant change" },
+            { value: "motivated", label: "Motivated", description: "Pressure helps me focus" },
+            { value: "thrive", label: "I thrive", description: "Deadlines are my fuel" },
+          ].map((option) => (
+            <button
+              key={option.value}
+              onClick={() => updateFormData({ pressureAnswer: option.value })}
+              className={`text-left p-3 text-sm border transition-all ${
+                formData.pressureAnswer === option.value
+                  ? "border-[#111] bg-[#111] text-[#fff]"
+                  : "border-[#ddd] hover:border-[#111]"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -717,45 +608,16 @@ function Step2Behavioral({ formData, updateFormData, onNext, onBack }: Step2Beha
         </button>
         <button
           onClick={onNext}
-          className="px-8 py-4 text-sm uppercase tracking-widest bg-[#111] text-[#fff] hover:bg-[#333] transition-all"
+          disabled={!isValid}
+          className={`px-8 py-4 text-sm uppercase tracking-widest transition-all ${
+            isValid 
+              ? "bg-[#111] text-[#fff] hover:bg-[#333]" 
+              : "bg-[#eee] text-[#999] cursor-not-allowed"
+          }`}
         >
           Continue
         </button>
       </div>
-
-      <style jsx global>{`
-        .slider-rail {
-          -webkit-appearance: none;
-          appearance: none;
-          height: 4px;
-          border-radius: 2px;
-          outline: none;
-        }
-        .slider-rail::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          appearance: none;
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
-          background: #111;
-          cursor: pointer;
-          border: 3px solid #fff;
-          box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-          transition: transform 0.1s ease;
-        }
-        .slider-rail::-webkit-slider-thumb:hover {
-          transform: scale(1.1);
-        }
-        .slider-rail::-moz-range-thumb {
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
-          background: #111;
-          cursor: pointer;
-          border: 3px solid #fff;
-          box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-        }
-      `}</style>
     </motion.div>
   );
 }
