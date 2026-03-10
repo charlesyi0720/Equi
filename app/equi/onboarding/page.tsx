@@ -140,7 +140,7 @@ export default function EquiOnboarding() {
               category: activity.category,
               activityType: activity.activityType,
               weekdayPattern: activity.weekdayPattern.length > 0 ? activity.weekdayPattern : "Everyday",
-              slots: activity.slots,
+              slots: activity.slots || [],
               isHardConstraint: activity.isHardConstraint,
             };
           } else {
@@ -1014,7 +1014,7 @@ function SummaryView({ user }: SummaryViewProps) {
   const name = user.understanding.name || "User";
   const persona = user.understanding.preferredAgentPersona;
   const fixedSlotsCount = user.lifeStructure.fixedActivities.reduce((count, activity) => {
-    if (activity.activityType === "strictlyFixed") {
+    if (activity.activityType === "strictlyFixed" && activity.slots) {
       return count + activity.slots.length;
     }
     return count;
