@@ -526,25 +526,28 @@ const AXES: AxisConfig[] = [
 ];
 
 function getMBTICode(axes: number[]): string {
+  // Use threshold of 50: < 50 = left letter, >= 50 = right letter
   const letters = ["I", "E", "N", "S", "T", "F", "J", "P"];
-  return axes.map((val, i) => val === 0 ? letters[i * 2] : letters[i * 2 + 1]).join("");
+  return axes.map((val, i) => val >= 50 ? letters[i * 2 + 1] : letters[i * 2]).join("");
 }
 
 function Step2Behavioral({ formData, updateFormData, onNext, onBack }: Step2BehavioralProps) {
-  // Parse current MBTI into axis values (0 = left, 1 = right)
+  // Parse current MBTI into axis values (0-100, default 0 = left letter)
   const currentMbti = formData.understanding?.mbti || "INTJ";
-  const [axisValues, setAxisValues] = useState(() => {
-    const getPosition = (letter: string, evenIndex: boolean): number => {
-      const idx = evenIndex ? 0 : 1;
-      return currentMbti[idx] === letter ? 0 : 1;
-    };
-    return [
-      getPosition("I", true),  // Energy: I(0) or E(1)
-      getPosition("N", true),  // Information: N(0) or S(1)
-      getPosition("T", true),  // Decision: T(0) or F(1)
-      getPosition("J", true),  // Lifestyle: J(0) or P(1)
-    ];
-  });
+  
+  // Map MBTI letter to axis position (0-100)
+  const getAxisValue = (letter: string, axisIndex: number): number => {
+    const leftLetters = ["I", "N", "T", "J"]; // Left side letters for each axis
+    const rightLetters = ["E", "S", "F", "P"];
+    return leftLetters.includes(letter) ? 0 : 100;
+  };
+  
+  const [axisValues, setAxisValues] = useState<number[]>([
+    getAxisValue(currentMbti[0], 0),  // Energy: I or E
+    getAxisValue(currentMbti[1], 1),  // Information: N or S
+    getAxisValue(currentMbti[2], 2),  // Decision: T or F
+    getAxisValue(currentMbti[3], 3),  // Lifestyle: J or P
+  ]);
 
   const mbtiCode = getMBTICode(axisValues);
   const traitDescription = MBTI_DESCRIPTIONS[mbtiCode] || "Unknown";
@@ -557,6 +560,14 @@ function Step2Behavioral({ formData, updateFormData, onNext, onBack }: Step2Beha
   const handleAxisChange = (index: number, value: number) => {
     const newAxes = [...axisValues];
     newAxes[index] = value;
+    setAxisValues(newAxes);
+  };
+
+  const handleAxisChangeEnd = (index: number, value: number) => {
+    // Snap to 0 or 100 on release
+    const snappedValue = value >= 50 ? 100 : 0;
+    const newAxes = [...axisValues];
+    newAxes[index] = snappedValue;
     setAxisValues(newAxes);
   };
 
@@ -583,32 +594,47 @@ function Step2Behavioral({ formData, updateFormData, onNext, onBack }: Step2Beha
 
       {/* 4-Axis Mixer */}
       <div className="space-y-8">
-        {AXES.map((axis, index) => (
-          <div key={axis.key} className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs uppercase tracking-widest text-[#111]">{axis.leftLabel}</span>
-              <span className="text-xs uppercase tracking-widest text-[#111]">{axis.rightLabel}</span>
+        {AXES.map((axis, index) => {
+          const value = axisValues[index];
+          const isLeftActive = value < 50;
+          const isRightActive = value >= 50;
+          const leftLabelClass = isLeftActive ? "text-[#111] font-semibold" : "text-[#999]";
+          const rightLabelClass = isRightActive ? "text-[#111] font-semibold" : "text-[#999]";
+          const leftHintClass = isLeftActive ? "text-[#111]" : "text-[#ccc]";
+          const rightHintClass = isRightActive ? "text-[#111]" : "text-[#ccc]";
+          
+          return (
+            <div key={axis.key} className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className={`text-xs uppercase tracking-widest transition-colors ${leftLabelClass}`}>{axis.leftLabel}</span>
+                <span className={`text-xs uppercase tracking-widest transition-colors ${rightLabelClass}`}>{axis.rightLabel}</span>
+              </div>
+              
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value={value}
+                onChange={(e) => handleAxisChange(index, Number(e.target.value))}
+                onMouseUp={(e) => handleAxisChangeEnd(index, Number((e.target as HTMLInputElement).value))}
+                onTouchEnd={(e) => {
+                  const input = e.target as HTMLInputElement;
+                  handleAxisChangeEnd(index, Number(input.value));
+                }}
+                className="w-full h-2 bg-transparent cursor-pointer slider-rail"
+                style={{
+                  background: `linear-gradient(to right, #111 0%, #111 ${value}%, #ddd ${value}%, #ddd 100%)`,
+                }}
+              />
+              
+              <div className="flex items-center justify-between">
+                <span className={`text-xs transition-colors ${leftHintClass}`}>{axis.leftHint}</span>
+                <span className={`text-xs transition-colors ${rightHintClass}`}>{axis.rightHint}</span>
+              </div>
             </div>
-            
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="1"
-              value={axisValues[index]}
-              onChange={(e) => handleAxisChange(index, Number(e.target.value))}
-              className="w-full h-1 bg-[#ddd] appearance-none cursor-pointer slider-thin"
-              style={{
-                background: `linear-gradient(to right, #111 ${axisValues[index] * 50}%, #ddd ${axisValues[index] * 50}%)`,
-              }}
-            />
-            
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-[#999]">{axis.leftHint}</span>
-              <span className="text-xs text-[#999]">{axis.rightHint}</span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Legacy Questions - Still needed for procrastination/pressure */}
@@ -684,25 +710,36 @@ function Step2Behavioral({ formData, updateFormData, onNext, onBack }: Step2Beha
       </div>
 
       <style jsx global>{`
-        .slider-thin::-webkit-slider-thumb {
+        .slider-rail {
           -webkit-appearance: none;
           appearance: none;
-          width: 16px;
-          height: 16px;
-          border-radius: 50%;
-          background: #111;
-          cursor: pointer;
-          border: 2px solid #fff;
-          box-shadow: 0 0 0 1px #111;
+          height: 4px;
+          border-radius: 2px;
+          outline: none;
         }
-        .slider-thin::-moz-range-thumb {
-          width: 16px;
-          height: 16px;
+        .slider-rail::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 20px;
+          height: 20px;
           border-radius: 50%;
           background: #111;
           cursor: pointer;
-          border: 2px solid #fff;
-          box-shadow: 0 0 0 1px #111;
+          border: 3px solid #fff;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+          transition: transform 0.1s ease;
+        }
+        .slider-rail::-webkit-slider-thumb:hover {
+          transform: scale(1.1);
+        }
+        .slider-rail::-moz-range-thumb {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: #111;
+          cursor: pointer;
+          border: 3px solid #fff;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.2);
         }
       `}</style>
     </motion.div>
