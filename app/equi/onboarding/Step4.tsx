@@ -688,10 +688,11 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
                     {WEEKDAYS.map((day) => {
                       const isSelected = activity.slots.some((s) => s.day === day);
                       const slot = activity.slots.find((s) => s.day === day);
+                      if (!slot) return null;
                       return (
                         <TimeSlotSelector
                           key={day}
-                          slot={slot!}
+                          slot={slot}
                           day={day}
                           onUpdate={(field, value) => updateSlot(index, day, field, value)}
                           onRemove={() => removeSlot(index, day)}
