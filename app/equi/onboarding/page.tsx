@@ -102,6 +102,11 @@ export default function EquiOnboarding() {
   const nextStep = () => setCurrentStep((prev) => Math.min(prev + 1, 7));
   const prevStep = () => setCurrentStep((prev) => Math.max(prev - 1, 1));
 
+  // Scroll to top on step transition
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [currentStep]);
+
   const buildEquiUser = (): EquiUser => {
     const now = new Date().toISOString();
     const procrastinationIndex = mapProcrastinationToIndex(formData.procrastinationAnswer);
