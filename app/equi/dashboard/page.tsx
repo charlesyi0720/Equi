@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { EquiUser } from "../types";
 import { supabase } from "../lib/supabase";
+import { getUser, onAuthStateChange, signOut } from "../lib/auth";
+import { useRouter } from "next/navigation";
 
 // ============================================================================
 // TYPES
@@ -26,11 +28,37 @@ export default function EquiDashboard() {
   const [inputValue, setInputValue] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await signOut();
+    router.push("/equi/login");
+  };
 
   // Load user data on mount
   useEffect(() => {
     const loadUserData = async () => {
-      // Try localStorage first
+      // Get current auth user
+      const { user } = await getUser();
+      
+      if (user && supabase) {
+        // Load from Supabase profile using auth user ID
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("user_data")
+          .eq("id", user.id)
+          .single();
+        
+        if (data?.user_data) {
+          setUserData(data.user_data);
+          localStorage.setItem("EQUI_USER_DATA", JSON.stringify(data.user_data));
+          console.log("Loaded user data from Supabase profile");
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      // Fallback: Try localStorage
       const savedUserData = localStorage.getItem("EQUI_USER_DATA");
       if (savedUserData) {
         try {
@@ -42,33 +70,24 @@ export default function EquiDashboard() {
         }
       }
 
-      // Also try to load from Supabase if email exists
-      const savedFormData = localStorage.getItem("EQUI_FORM_DATA");
-      if (savedFormData && supabase) {
-        try {
-          const parsed = JSON.parse(savedFormData);
-          const email = parsed?.email;
-          if (email) {
-            const { data } = await supabase
-              .from("profiles")
-              .select("user_data")
-              .eq("email", email)
-              .single();
-            
-            if (data?.user_data) {
-              setUserData(data.user_data);
-              console.log("Loaded user data from Supabase");
-            }
-          }
-        } catch (e) {
-          console.error("Error loading from Supabase:", e);
-        }
-      }
-
       setIsLoading(false);
     };
 
     loadUserData();
+
+    // Listen for auth changes
+    const { data: { subscription } } = onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_IN" && session) {
+        // Reload user data when signed in
+        const { data } = await supabase?.from("profiles").select("user_data").eq("id", session.user.id).single();
+        if (data?.user_data) {
+          setUserData(data.user_data);
+          localStorage.setItem("EQUI_USER_DATA", JSON.stringify(data.user_data));
+        }
+      }
+    });
+
+    return () => subscription?.unsubscribe();
   }, []);
 
   // Auto-trigger opening message when user data loads
@@ -239,9 +258,17 @@ export default function EquiDashboard() {
             <h1 className="text-xl font-light tracking-tight">EQUI</h1>
             <p className="text-xs text-[#666] uppercase tracking-widest">Personal AI Lifestyle Architect</p>
           </div>
-          <div className="text-right">
-            <div className="text-sm font-medium">{name}</div>
-            <div className="text-xs text-[#666]">{occupation}</div>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <div className="text-sm font-medium">{name}</div>
+              <div className="text-xs text-[#666]">{occupation}</div>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="text-xs text-[#999] hover:text-[#111] transition-colors underline"
+            >
+              Logout
+            </button>
           </div>
         </div>
       </header>

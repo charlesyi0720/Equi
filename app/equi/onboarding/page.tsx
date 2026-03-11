@@ -16,6 +16,7 @@ import { Step4Structures } from "./Step4";
 import { StepCalibration } from "./StepCalibration";
 import { LandingSection } from "./LandingSection";
 import { supabase } from "../lib/supabase";
+import { getUser, updateProfile } from "../lib/auth";
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -353,18 +354,47 @@ export default function EquiOnboarding() {
       if (!supabase) {
         console.log("Supabase not configured, skipping sync to database");
       } else {
-        const { data, error: supabaseError } = await supabase
-          .from("profiles")
-          .upsert(
-            profileData,
-            { onConflict: "email" }
-          );
-
-        console.log("Supabase response - data:", data);
-        if (supabaseError) {
-          console.error("Supabase Sync Error:", supabaseError.message, supabaseError.details, supabaseError);
+        // Get current auth user
+        const { user } = await getUser();
+        
+        // Prepare profile data
+        const profileUpdate: any = {
+          email,
+          user_data: finalData,
+          updated_at: new Date().toISOString(),
+          onboarding_completed: true,
+        };
+        
+        // If user is logged in, use their ID
+        if (user) {
+          profileUpdate.id = user.id;
+          
+          // Update profile using auth ID
+          const { error: updateError } = await supabase
+            .from("profiles")
+            .update(profileUpdate)
+            .eq("id", user.id);
+          
+          if (updateError) {
+            console.error("Failed to update profile:", updateError);
+          } else {
+            console.log("Profile updated with onboarding_completed=true");
+          }
         } else {
-          console.log("Supabase Sync Success! Data:", data);
+          // Fallback: upsert by email (for non-auth users)
+          const { data, error: supabaseError } = await supabase
+            .from("profiles")
+            .upsert(
+              profileUpdate,
+              { onConflict: "email" }
+            );
+          
+          console.log("Supabase response - data:", data);
+          if (supabaseError) {
+            console.error("Supabase Sync Error:", supabaseError.message, supabaseError.details, supabaseError);
+          } else {
+            console.log("Supabase Sync Success! Data:", data);
+          }
         }
       }
       
