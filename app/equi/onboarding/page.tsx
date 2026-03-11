@@ -15,6 +15,7 @@ import {
 import { Step4Structures } from "./Step4";
 import { StepCalibration } from "./StepCalibration";
 import { LandingSection } from "./LandingSection";
+import { supabase } from "../lib/supabase";
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -66,6 +67,7 @@ export default function EquiOnboarding() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submittedUser, setSubmittedUser] = useState<EquiUser | null>(null);
   const [formData, setFormData] = useState({
+    email: "",
     name: "",
     occupation: "",
     preferredTitle: "",
@@ -107,6 +109,95 @@ export default function EquiOnboarding() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [currentStep]);
+
+  // Hydration: Load data from Supabase on mount
+  useEffect(() => {
+    const loadUserData = async () => {
+      // First try to get email from localStorage
+      const savedFormData = localStorage.getItem("EQUI_FORM_DATA");
+      let email = "";
+      
+      if (savedFormData) {
+        try {
+          const parsed = JSON.parse(savedFormData);
+          email = parsed?.email || "";
+        } catch (e) {
+          console.error("Error parsing saved form data:", e);
+        }
+      }
+      
+      // If we have an email, try to load from Supabase
+      if (email) {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("user_data")
+          .eq("email", email)
+          .single();
+        
+        if (error) {
+          console.log("No existing profile in Supabase or error:", error.message);
+        } else if (data?.user_data) {
+          console.log("Loaded user data from Supabase:", data.user_data);
+          
+          // Restore formData from user_data
+          const userData = data.user_data;
+          const restoredFormData = {
+            email,
+            name: userData?.understanding?.name || "",
+            occupation: userData?.understanding?.occupation || "",
+            preferredTitle: userData?.understanding?.preferredTitle || "",
+            focusLevel: "",
+            planningStyleAnswer: "",
+            procrastinationAnswer: "",
+            pressureAnswer: "",
+            understanding: {
+              mbti: userData?.understanding?.mbti || "INTJ",
+            },
+            focusPeaks: (userData?.understanding?.biologicalClock?.focusPeaks || []).map((peak: any) => ({
+              startHour: peak?.start?.hour ?? 9,
+              endHour: peak?.end?.hour ?? 12,
+              days: peak?.weekday ? [peak.weekday] : [],
+            })),
+            energyDips: (userData?.understanding?.biologicalClock?.energyDips || []).map((dip: any) => ({
+              startHour: dip?.start?.hour ?? 14,
+              endHour: dip?.end?.hour ?? 15,
+              days: dip?.weekday ? [dip.weekday] : [],
+            })),
+            fixedActivities: (userData?.lifeStructure?.fixedActivities || []).map((activity: any) => ({
+              id: activity.id,
+              label: activity.label,
+              category: activity.category,
+              activityType: activity.activityType,
+              weekdayPattern: Array.isArray(activity.weekdayPattern) 
+                ? activity.weekdayPattern 
+                : activity.weekdayPattern === "Everyday" 
+                  ? ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+                  : [],
+              slots: activity.slots || [],
+              flexibleQuota: activity.flexibleQuota,
+              isHardConstraint: activity.isHardConstraint,
+            })),
+            lifeMode: userData?.understanding?.lifeState?.mode || "Normal",
+            lifeModeEndDate: "",
+            updateFrequency: userData?.understanding?.updatePreferences?.frequency || "Weekly",
+            agentPersona: userData?.understanding?.preferredAgentPersona || "DevotedSecretary",
+          };
+          
+          setFormData(restoredFormData);
+          
+          // Also restore the full user data
+          if (userData) {
+            setSubmittedUser(userData);
+            setIsSubmitted(true);
+          }
+          
+          console.log("Form data restored from Supabase");
+        }
+      }
+    };
+    
+    loadUserData();
+  }, []);
 
   const buildEquiUser = (): EquiUser => {
     const now = new Date().toISOString();
@@ -218,7 +309,7 @@ export default function EquiOnboarding() {
     };
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     try {
       const equiUser = buildEquiUser();
       
@@ -243,6 +334,35 @@ export default function EquiOnboarding() {
       // Also save the raw formData for future edits
       localStorage.setItem("EQUI_FORM_DATA", JSON.stringify(formData));
       console.log("Form data saved to localStorage for edits");
+      
+// Sync to Supabase profiles table
+      const email = formData.email || "anonymous@equi.app";
+      console.log("Attempting to sync data:", formData);
+      console.log("Email being used:", email);
+
+      // Add a small delay and more detailed logging
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const profileData = {
+        email,
+        user_data: finalData,
+        updated_at: new Date().toISOString(),
+      };
+      console.log("Profile data to upsert:", JSON.stringify(profileData, null, 2));
+
+      const { data, error: supabaseError } = await supabase
+        .from("profiles")
+        .upsert(
+          profileData,
+          { onConflict: "email" }
+        );
+
+      console.log("Supabase response - data:", data);
+      if (supabaseError) {
+        console.error("Supabase Sync Error:", supabaseError.message, supabaseError.details, supabaseError);
+      } else {
+        console.log("Supabase Sync Success! Data:", data);
+      }
       
       // Set submitted state to show summary view
       setSubmittedUser(finalData);
@@ -397,13 +517,13 @@ export default function EquiOnboarding() {
 // ============================================================================
 
 interface Step1IdentityProps {
-  formData: { name: string; occupation: string; preferredTitle: string };
-  updateFormData: (data: Partial<{ name: string; occupation: string; preferredTitle: string }>) => void;
+  formData: { email: string; name: string; occupation: string; preferredTitle: string };
+  updateFormData: (data: Partial<{ email: string; name: string; occupation: string; preferredTitle: string }>) => void;
   onNext: () => void;
 }
 
 function Step1Identity({ formData, updateFormData, onNext }: Step1IdentityProps) {
-  const isValid = formData.name.trim() && formData.occupation.trim() && formData.preferredTitle.trim();
+  const isValid = formData.email.trim() && formData.name.trim() && formData.occupation.trim() && formData.preferredTitle.trim();
 
   return (
     <motion.div
@@ -418,6 +538,17 @@ function Step1Identity({ formData, updateFormData, onNext }: Step1IdentityProps)
       </div>
 
       <div className="space-y-6">
+        <div className="space-y-2">
+          <label className="text-xs uppercase tracking-widest text-[#111] font-medium">Email</label>
+          <input
+            type="email"
+            value={formData.email}
+            onChange={(e) => updateFormData({ email: e.target.value })}
+            placeholder="your@email.com"
+            className="w-full border-b border-[#ddd] py-3 text-lg bg-transparent outline-none focus:border-[#111] transition-colors placeholder:text-[#ccc]"
+          />
+        </div>
+
         <div className="space-y-2">
           <label className="text-xs uppercase tracking-widest text-[#111] font-medium">Your Name</label>
           <input
