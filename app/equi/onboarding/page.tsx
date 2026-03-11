@@ -1419,14 +1419,14 @@ function SummaryView({ user }: SummaryViewProps) {
       
       {/* Action Button */}
       <div className="pt-6 border-t border-[#eee]">
-        <button
-          disabled
-          className="w-full px-8 py-4 text-sm uppercase tracking-widest bg-[#eee] text-[#999] cursor-not-allowed"
+        <a
+          href="/equi/dashboard"
+          className="block w-full px-8 py-4 text-sm uppercase tracking-widest bg-[#111] text-[#fff] hover:bg-[#333] transition-colors text-center"
         >
-          Go to Dashboard (Coming Soon)
-        </button>
+          Go to Dashboard
+        </a>
         <p className="text-xs text-[#666] text-center mt-4">
-          Your data has been saved locally. Dashboard access coming soon.
+          Your data has been saved. Start using Equi now.
         </p>
       </div>
     </motion.div>
