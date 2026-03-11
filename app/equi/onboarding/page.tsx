@@ -127,7 +127,7 @@ export default function EquiOnboarding() {
       }
       
       // If we have an email, try to load from Supabase
-      if (email) {
+      if (email && supabase) {
         const { data, error } = await supabase
           .from("profiles")
           .select("user_data")
@@ -350,18 +350,22 @@ export default function EquiOnboarding() {
       };
       console.log("Profile data to upsert:", JSON.stringify(profileData, null, 2));
 
-      const { data, error: supabaseError } = await supabase
-        .from("profiles")
-        .upsert(
-          profileData,
-          { onConflict: "email" }
-        );
-
-      console.log("Supabase response - data:", data);
-      if (supabaseError) {
-        console.error("Supabase Sync Error:", supabaseError.message, supabaseError.details, supabaseError);
+      if (!supabase) {
+        console.log("Supabase not configured, skipping sync to database");
       } else {
-        console.log("Supabase Sync Success! Data:", data);
+        const { data, error: supabaseError } = await supabase
+          .from("profiles")
+          .upsert(
+            profileData,
+            { onConflict: "email" }
+          );
+
+        console.log("Supabase response - data:", data);
+        if (supabaseError) {
+          console.error("Supabase Sync Error:", supabaseError.message, supabaseError.details, supabaseError);
+        } else {
+          console.log("Supabase Sync Success! Data:", data);
+        }
       }
       
       // Set submitted state to show summary view
