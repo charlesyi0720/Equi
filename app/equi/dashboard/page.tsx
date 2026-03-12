@@ -76,7 +76,7 @@ export default function EquiDashboard() {
     loadUserData();
 
     // Listen for auth changes
-    const { data: { subscription } } = onAuthStateChange(async (event, session) => {
+    const subscription = onAuthStateChange(async (event, session) => {
       if (event === "SIGNED_IN" && session) {
         // Reload user data when signed in
         const { data } = await supabase?.from("profiles").select("user_data").eq("id", session.user.id).single();
