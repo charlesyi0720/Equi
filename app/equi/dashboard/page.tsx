@@ -88,7 +88,11 @@ export default function EquiDashboard() {
       }
     });
 
-    return () => subscription?.unsubscribe();
+    return () => {
+      if (subscription && 'unsubscribe' in subscription) {
+        subscription.unsubscribe();
+      }
+    };
   }, []);
 
   // Auto-trigger opening message when user data loads
