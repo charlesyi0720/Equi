@@ -27,14 +27,18 @@ export default function LoginPage() {
     
     checkSession();
 
-    const { data: { subscription } } = onAuthStateChange(async (event, session) => {
+    const subscription = onAuthStateChange(async (event, session) => {
       if (event === "SIGNED_IN" && session) {
         const completed = await hasCompletedOnboarding(session.user.id);
         router.push(completed ? "/equi/dashboard" : "/equi/onboarding");
       }
     });
 
-    return () => subscription?.unsubscribe();
+    return () => {
+      if (subscription && 'unsubscribe' in subscription) {
+        subscription.unsubscribe();
+      }
+    };
   }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
