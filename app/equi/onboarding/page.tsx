@@ -16,7 +16,8 @@ import { Step4Structures } from "./Step4";
 import { StepCalibration } from "./StepCalibration";
 import { LandingSection } from "./LandingSection";
 import { supabase } from "../lib/supabase";
-import { getUser, updateProfile } from "../lib/auth";
+import { getUser, updateProfile, hasCompletedOnboarding } from "../lib/auth";
+import { useRouter } from "next/navigation";
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -55,6 +56,34 @@ function generateId(): string {
 // ============================================================================
 
 export default function EquiOnboarding() {
+  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Auth check: redirect to dashboard if onboarding is already completed
+  useEffect(() => {
+    const checkOnboardingStatus = async () => {
+      const { user } = await getUser();
+      if (user) {
+        const completed = await hasCompletedOnboarding(user.id);
+        if (completed) {
+          router.push("/equi/dashboard");
+          return;
+        }
+      }
+      setIsLoading(false);
+    };
+    checkOnboardingStatus();
+  }, [router]);
+  
+  // Show loading while checking auth status
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#fff] flex items-center justify-center">
+        <div className="text-xs uppercase tracking-widest text-[#666]">Loading...</div>
+      </div>
+    );
+  }
+  
   // Global error handler for debugging
   useEffect(() => {
     const handleError = (event: ErrorEvent) => {
@@ -68,7 +97,6 @@ export default function EquiOnboarding() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submittedUser, setSubmittedUser] = useState<EquiUser | null>(null);
   const [formData, setFormData] = useState({
-    email: "",
     name: "",
     occupation: "",
     preferredTitle: "",
@@ -114,18 +142,9 @@ export default function EquiOnboarding() {
   // Hydration: Load data from Supabase on mount
   useEffect(() => {
     const loadUserData = async () => {
-      // First try to get email from localStorage
-      const savedFormData = localStorage.getItem("EQUI_FORM_DATA");
-      let email = "";
-      
-      if (savedFormData) {
-        try {
-          const parsed = JSON.parse(savedFormData);
-          email = parsed?.email || "";
-        } catch (e) {
-          console.error("Error parsing saved form data:", e);
-        }
-      }
+      // Get user from Supabase auth
+      const { user } = await getUser();
+      const email = user?.email || "";
       
       // If we have an email, try to load from Supabase
       if (email && supabase) {
@@ -143,7 +162,6 @@ export default function EquiOnboarding() {
           // Restore formData from user_data
           const userData = data.user_data;
           const restoredFormData = {
-            email,
             name: userData?.understanding?.name || "",
             occupation: userData?.understanding?.occupation || "",
             preferredTitle: userData?.understanding?.preferredTitle || "",
@@ -337,7 +355,9 @@ export default function EquiOnboarding() {
       console.log("Form data saved to localStorage for edits");
       
 // Sync to Supabase profiles table
-      const email = formData.email || "anonymous@equi.app";
+      // Get current auth user
+      const { user } = await getUser();
+      const email = user?.email || "anonymous@equi.app";
       console.log("Attempting to sync data:", formData);
       console.log("Email being used:", email);
 
@@ -354,9 +374,6 @@ export default function EquiOnboarding() {
       if (!supabase) {
         console.log("Supabase not configured, skipping sync to database");
       } else {
-        // Get current auth user
-        const { user } = await getUser();
-        
         // Prepare profile data
         const profileUpdate: any = {
           email,
@@ -423,7 +440,17 @@ export default function EquiOnboarding() {
     <div className="min-h-screen bg-[#fff] text-[#111] font-sans">
       {/* Landing Section (Step 0) */}
       {currentStep === 0 ? (
-        <LandingSection onStart={() => {
+        <LandingSection onStart={async () => {
+          // Check if user is authenticated
+          const { user } = await getUser();
+          
+          if (!user) {
+            // Not authenticated - redirect to signup
+            router.push("/equi/login?mode=signup");
+            return;
+          }
+          
+          // User is authenticated - proceed to onboarding
           const landingSection = document.getElementById('landing-section');
           if (landingSection) {
             landingSection.style.opacity = '0';
@@ -551,13 +578,13 @@ export default function EquiOnboarding() {
 // ============================================================================
 
 interface Step1IdentityProps {
-  formData: { email: string; name: string; occupation: string; preferredTitle: string };
-  updateFormData: (data: Partial<{ email: string; name: string; occupation: string; preferredTitle: string }>) => void;
+  formData: { name: string; occupation: string; preferredTitle: string };
+  updateFormData: (data: Partial<{ name: string; occupation: string; preferredTitle: string }>) => void;
   onNext: () => void;
 }
 
 function Step1Identity({ formData, updateFormData, onNext }: Step1IdentityProps) {
-  const isValid = formData.email.trim() && formData.name.trim() && formData.occupation.trim() && formData.preferredTitle.trim();
+  const isValid = formData.name.trim() && formData.occupation.trim() && formData.preferredTitle.trim();
 
   return (
     <motion.div
@@ -572,17 +599,6 @@ function Step1Identity({ formData, updateFormData, onNext }: Step1IdentityProps)
       </div>
 
       <div className="space-y-6">
-        <div className="space-y-2">
-          <label className="text-xs uppercase tracking-widest text-[#111] font-medium">Email</label>
-          <input
-            type="email"
-            value={formData.email}
-            onChange={(e) => updateFormData({ email: e.target.value })}
-            placeholder="your@email.com"
-            className="w-full border-b border-[#ddd] py-3 text-lg bg-transparent outline-none focus:border-[#111] transition-colors placeholder:text-[#ccc]"
-          />
-        </div>
-
         <div className="space-y-2">
           <label className="text-xs uppercase tracking-widest text-[#111] font-medium">Your Name</label>
           <input

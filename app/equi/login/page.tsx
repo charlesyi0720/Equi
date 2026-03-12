@@ -14,6 +14,14 @@ export default function LoginPage() {
   const [mounted, setMounted] = useState(false);
   const router = useRouter();
 
+  // Check for mode=signup query param
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get("mode") === "signup") {
+      setIsSignUp(true);
+    }
+  }, []);
+
   useEffect(() => {
     setMounted(true);
     
