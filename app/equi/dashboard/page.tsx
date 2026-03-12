@@ -79,7 +79,8 @@ export default function EquiDashboard() {
     const subscription = onAuthStateChange(async (event, session) => {
       if (event === "SIGNED_IN" && session) {
         // Reload user data when signed in
-        const { data } = await supabase?.from("profiles").select("user_data").eq("id", session.user.id).single();
+        if (!supabase) return;
+        const { data } = await supabase.from("profiles").select("user_data").eq("id", session.user.id).single();
         if (data?.user_data) {
           setUserData(data.user_data);
           localStorage.setItem("EQUI_USER_DATA", JSON.stringify(data.user_data));
