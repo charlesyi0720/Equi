@@ -58,41 +58,6 @@ function generateId(): string {
 export default function EquiOnboarding() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
-  
-  // Auth check: redirect to dashboard if onboarding is already completed
-  useEffect(() => {
-    const checkOnboardingStatus = async () => {
-      const { user } = await getUser();
-      if (user) {
-        const completed = await hasCompletedOnboarding(user.id);
-        if (completed) {
-          router.push("/equi/dashboard");
-          return;
-        }
-      }
-      setIsLoading(false);
-    };
-    checkOnboardingStatus();
-  }, [router]);
-  
-  // Show loading while checking auth status
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#fff] flex items-center justify-center">
-        <div className="text-xs uppercase tracking-widest text-[#666]">Loading...</div>
-      </div>
-    );
-  }
-  
-  // Global error handler for debugging
-  useEffect(() => {
-    const handleError = (event: ErrorEvent) => {
-      console.error('[DEBUG] Uncaught error:', event.message, 'at', event.filename, 'line', event.lineno);
-    };
-    window.addEventListener('error', handleError);
-    return () => window.removeEventListener('error', handleError);
-  }, []);
-  
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submittedUser, setSubmittedUser] = useState<EquiUser | null>(null);
@@ -127,6 +92,40 @@ export default function EquiOnboarding() {
     agentPersona: AgentPersona.DevotedSecretary,
   });
 
+  // Auth check: redirect to dashboard if onboarding is already completed
+  useEffect(() => {
+    const checkOnboardingStatus = async () => {
+      const { user } = await getUser();
+      if (user) {
+        const completed = await hasCompletedOnboarding(user.id);
+        if (completed) {
+          router.push("/equi/dashboard");
+          return;
+        }
+      }
+      setIsLoading(false);
+    };
+    checkOnboardingStatus();
+  }, [router]);
+  
+  // Show loading while checking auth status
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#fff] flex items-center justify-center">
+        <div className="text-xs uppercase tracking-widest text-[#666]">Loading...</div>
+      </div>
+    );
+  }
+  
+  // Global error handler for debugging
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      console.error('[DEBUG] Uncaught error:', event.message, 'at', event.filename, 'line', event.lineno);
+    };
+    window.addEventListener('error', handleError);
+    return () => window.removeEventListener('error', handleError);
+  }, []);
+  
   const updateFormData = (data: Partial<typeof formData>) => {
     setFormData((prev) => ({ ...prev, ...data }));
   };
