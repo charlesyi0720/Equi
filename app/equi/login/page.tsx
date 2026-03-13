@@ -49,7 +49,10 @@ export default function LoginPage() {
           );
           const completed = await Promise.race([onboardingPromise, onboardingTimeout]) as boolean;
           
-          console.log("[LOGIN] Onboarding completed:", completed);
+          console.log("[LOGIN] Final redirect decision:", {
+            completed,
+            willGoTo: completed ? "/equi/dashboard" : "/equi/onboarding"
+          });
           router.push(completed ? "/equi/dashboard" : "/equi/onboarding");
           return;
         }

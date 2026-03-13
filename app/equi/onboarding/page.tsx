@@ -15,7 +15,7 @@ import {
 import { Step4Structures } from "./Step4";
 import { StepCalibration } from "./StepCalibration";
 import { LandingSection } from "./LandingSection";
-import { supabase } from "../lib/supabase";
+import { supabase, supabaseAdmin } from "../lib/supabase";
 import { getUser, updateProfile, hasCompletedOnboarding } from "../lib/auth";
 import { useRouter } from "next/navigation";
 
@@ -375,20 +375,25 @@ export default function EquiOnboarding() {
           onboarding_completed: true,
         };
         
-        // If user is logged in, use their ID
+        // If user is logged in, use upsert to ensure profile exists and is updated
         if (user) {
           profileUpdate.id = user.id;
           
-          // Update profile using auth ID
-          const { error: updateError } = await supabase
+          // Use upsert instead of update to handle both insert and update cases
+          const { error: upsertError } = await (supabaseAdmin || supabase)
             .from("profiles")
-            .update(profileUpdate)
-            .eq("id", user.id);
+            .upsert(profileUpdate, { onConflict: "id" });
+
+          console.log("[ONBOARDING] Profile upsert attempt:", {
+            usedAdmin: !!supabaseAdmin,
+            userId: user.id,
+            error: upsertError?.message || "none"
+          });
           
-          if (updateError) {
-            console.error("Failed to update profile:", updateError);
+          if (upsertError) {
+            console.error("Failed to upsert profile:", upsertError);
           } else {
-            console.log("Profile updated with onboarding_completed=true");
+            console.log("Profile upserted with onboarding_completed=true");
           }
         } else {
           // Fallback: upsert by email (for non-auth users)
