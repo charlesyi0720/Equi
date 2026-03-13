@@ -1,0 +1,6 @@
+{"sessionId":"530277","location":"auth.ts:336","message":"hasCompletedOnboarding checking","data":{"userId":"ef647872-0f5c-4113-ab1a-546445de9ecc"},"timestamp":1773404037750}
+{"sessionId":"530277","location":"auth.ts:344","message":"hasCompletedOnboarding getProfile result","data":{"userId":"ef647872-0f5c-4113-ab1a-546445de9ecc","hasProfile":true,"error":null},"timestamp":1773404038451}
+{"sessionId":"530277","location":"auth.ts:336","message":"hasCompletedOnboarding checking","data":{"userId":"ef647872-0f5c-4113-ab1a-546445de9ecc"},"timestamp":1773404038452}
+{"sessionId":"530277","location":"auth.ts:344","message":"hasCompletedOnboarding getProfile result","data":{"userId":"ef647872-0f5c-4113-ab1a-546445de9ecc","hasProfile":true,"error":null},"timestamp":1773404038795}
+{"sessionId":"530277","location":"auth.ts:336","message":"hasCompletedOnboarding checking","data":{"userId":"ef647872-0f5c-4113-ab1a-546445de9ecc"},"timestamp":1773404039777}
+{"sessionId":"530277","location":"auth.ts:344","message":"hasCompletedOnboarding getProfile result","data":{"userId":"ef647872-0f5c-4113-ab1a-546445de9ecc","hasProfile":true,"error":null},"timestamp":1773404039975}

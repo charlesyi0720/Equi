@@ -346,7 +346,7 @@ export async function hasCompletedOnboarding(userId: string): Promise<boolean> {
     const { profile, error } = await Promise.race([profilePromise, profileTimeout]) as any;
 
     // #region agent debug log
-    fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'530277'},body:JSON.stringify({sessionId:'530277',location:'auth.ts:344',message:'hasCompletedOnboarding getProfile result',data:{userId,hasProfile:!!profile,error,onboardingCompleted:profile?.onboarding_completed},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'530277'},body:JSON.stringify({sessionId:'530277',location:'auth.ts:344',message:'hasCompletedOnboarding getProfile result',data:{userId,hasProfile:!!profile,error,profileKeys:profile?Object.keys(profile),onboardingCompleted:profile?.onboarding_completed,onboardingCompletedType:typeof profile?.onboarding_completed},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
 
     console.log("[AUTH DEBUG] hasCompletedOnboarding result:", {
@@ -368,6 +368,11 @@ export async function hasCompletedOnboarding(userId: string): Promise<boolean> {
     }
 
     const result = profile.onboarding_completed === true;
+    
+    // #region agent debug log
+    fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'530277'},body:JSON.stringify({sessionId:'530277',location:'auth.ts:370',message:'hasCompletedOnboarding final result',data:{userId,result,profileOnboardingCompleted:profile.onboarding_completed,comparison:profile.onboarding_completed === true},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    
     console.log("[AUTH DEBUG] hasCompletedOnboarding returning:", result);
     return result;
   } catch (err) {

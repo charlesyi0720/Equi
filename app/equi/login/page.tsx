@@ -54,7 +54,7 @@ export default function LoginPage() {
           const completed = await Promise.race([onboardingPromise, onboardingTimeout]) as boolean;
           
           // #region agent debug log
-          fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'530277'},body:JSON.stringify({sessionId:'530277',location:'login/page.tsx:52',message:'Login hasCompletedOnboarding result',data:{userId:session.user.id,completed},timestamp:Date.now()})}).catch(()=>{});
+          fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'530277'},body:JSON.stringify({sessionId:'530277',location:'login/page.tsx:52',message:'Login hasCompletedOnboarding result',data:{userId:session.user.id,completed,completedType:typeof completed},timestamp:Date.now()})}).catch(()=>{});
           // #endregion
           
           console.log("[LOGIN] Final redirect decision:", {
