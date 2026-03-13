@@ -42,10 +42,10 @@ export default function LoginPage() {
         if (session) {
           console.log("[LOGIN] User id:", session.user.id);
           
-          // Check onboarding with timeout
+          // Check onboarding - if timeout or error, assume completed to avoid blocking users
           const onboardingPromise = hasCompletedOnboarding(session.user.id);
           const onboardingTimeout = new Promise((resolve) => 
-            setTimeout(() => resolve(false), 5000)
+            setTimeout(() => resolve(true), 15000) // timeout = assume completed
           );
           const completed = await Promise.race([onboardingPromise, onboardingTimeout]) as boolean;
           
