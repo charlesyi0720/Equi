@@ -384,6 +384,10 @@ export default function EquiOnboarding() {
             .from("profiles")
             .upsert(profileUpdate, { onConflict: "id" });
 
+          // #region agent debug log
+          fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'530277'},body:JSON.stringify({sessionId:'530277',location:'onboarding/page.tsx:387',message:'Onboarding profile upsert',data:{userId:user.id,hasError:!!upsertError,errorMsg:upsertError?.message,usedAdmin:!!supabaseAdmin},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+
           console.log("[ONBOARDING] Profile upsert attempt:", {
             usedAdmin: !!supabaseAdmin,
             userId: user.id,

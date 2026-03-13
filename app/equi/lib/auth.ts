@@ -333,6 +333,10 @@ export async function hasCompletedOnboarding(userId: string): Promise<boolean> {
   try {
     console.log("[AUTH DEBUG] hasCompletedOnboarding checking for:", userId);
     
+    // #region agent debug log
+    fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'530277'},body:JSON.stringify({sessionId:'530277',location:'auth.ts:336',message:'hasCompletedOnboarding checking',data:{userId},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    
     // Increase timeout to 15 seconds
     const profilePromise = getProfile(userId);
     const profileTimeout = new Promise<{ profile: null, error: null }>((resolve) =>
@@ -340,6 +344,10 @@ export async function hasCompletedOnboarding(userId: string): Promise<boolean> {
     );
     
     const { profile, error } = await Promise.race([profilePromise, profileTimeout]) as any;
+
+    // #region agent debug log
+    fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'530277'},body:JSON.stringify({sessionId:'530277',location:'auth.ts:344',message:'hasCompletedOnboarding getProfile result',data:{userId,hasProfile:!!profile,error,onboardingCompleted:profile?.onboarding_completed},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
 
     console.log("[AUTH DEBUG] hasCompletedOnboarding result:", {
       profile: profile ? "exists" : null,
