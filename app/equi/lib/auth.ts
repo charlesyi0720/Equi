@@ -103,14 +103,19 @@ export async function signOut(): Promise<{ error: string | null }> {
  * Get current session
  */
 export async function getSession() {
+  console.log("[AUTH] getSession called");
   if (!supabase) {
+    console.log("[AUTH] getSession: Supabase not initialized");
     return { session: null, error: "Supabase not initialized" };
   }
 
   try {
+    console.log("[AUTH] getSession: calling supabase.auth.getSession()");
     const { data: { session }, error } = await supabase.auth.getSession();
+    console.log("[AUTH] getSession result:", { hasSession: !!session, userId: session?.user?.id, error });
     return { session, error: error?.message || null };
   } catch (err) {
+    console.log("[AUTH] getSession exception:", err);
     return { session: null, error: "An unexpected error occurred" };
   }
 }
@@ -217,25 +222,39 @@ export async function getProfile(userId: string): Promise<{
   profile: ProfileData | null;
   error: string | null;
 }> {
+  console.log("[AUTH] getProfile START, userId:", userId);
+  console.log("[AUTH] getProfile, supabaseAdmin exists:", !!supabaseAdmin, "supabase exists:", !!supabase);
+
   if (!supabaseAdmin) {
     // Fallback to regular client if admin not available
     if (!supabase) {
+      console.log("[AUTH DEBUG] getProfile: No supabase client at all");
       return { profile: null, error: "Supabase not initialized" };
     }
-    
+
     try {
+      console.log("[AUTH DEBUG] getProfile: Using regular client to fetch profile for:", userId);
       const { data, error } = await supabase
         .from("profiles")
         .select("*")
         .eq("id", userId)
         .single();
-      
+
+      console.log("[AUTH DEBUG] getProfile regular client result:", { data, error: error?.message });
+
+      // If profile doesn't exist, return null (don't block)
+      if (error && error.code === 'PGRST116') {
+        console.log("[AUTH DEBUG] getProfile: Profile not found, returning null");
+        return { profile: null, error: null };
+      }
+
       if (error) {
         return { profile: null, error: error.message };
       }
-      
+
       return { profile: data as ProfileData, error: null };
     } catch (err) {
+      console.log("[AUTH DEBUG] getProfile exception:", err);
       return { profile: null, error: "An unexpected error occurred" };
     }
   }
@@ -246,6 +265,14 @@ export async function getProfile(userId: string): Promise<{
       .select("*")
       .eq("id", userId)
       .single();
+
+    console.log("[AUTH DEBUG] getProfile admin result:", { hasData: !!data, error: error?.message });
+
+    // If profile doesn't exist, return null (don't block)
+    if (error && error.code === 'PGRST116') {
+      console.log("[AUTH DEBUG] getProfile: Profile not found, returning null");
+      return { profile: null, error: null };
+    }
 
     if (error) {
       return { profile: null, error: error.message };
@@ -303,20 +330,35 @@ export async function updateProfile(userId: string, updates: {
  * Check if user has completed onboarding
  */
 export async function hasCompletedOnboarding(userId: string): Promise<boolean> {
-  console.log("[AUTH DEBUG] hasCompletedOnboarding checking for:", userId);
-  const { profile, error } = await getProfile(userId);
+  try {
+    console.log("[AUTH DEBUG] hasCompletedOnboarding checking for:", userId);
+    
+    // Add timeout to getProfile
+    const profilePromise = getProfile(userId);
+    const profileTimeout = new Promise<{ profile: null, error: null }>((resolve) =>
+      setTimeout(() => resolve({ profile: null, error: null }), 8000)
+    );
+    
+    const { profile, error } = await Promise.race([profilePromise, profileTimeout]) as any;
 
-  console.log("[AUTH DEBUG] hasCompletedOnboarding result:", { 
-    profile, 
-    error,
-    completed: profile?.onboarding_completed 
-  });
+    console.log("[AUTH DEBUG] hasCompletedOnboarding result:", {
+      profile: profile ? "exists" : null,
+      error,
+      completed: profile?.onboarding_completed
+    });
 
-  if (error || !profile) {
+    if (error || !profile) {
+      console.log("[AUTH DEBUG] hasCompletedOnboarding returning false due to error or no profile");
+      return false;
+    }
+
+    const result = profile.onboarding_completed === true;
+    console.log("[AUTH DEBUG] hasCompletedOnboarding returning:", result);
+    return result;
+  } catch (err) {
+    console.log("[AUTH DEBUG] hasCompletedOnboarding exception:", err);
     return false;
   }
-
-  return profile.onboarding_completed === true;
 }
 
 /**

@@ -22,23 +22,55 @@ export default function LoginPage() {
     }
   }, []);
 
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
   useEffect(() => {
     setMounted(true);
     
     const checkSession = async () => {
-      const { session } = await getSession();
-      if (session) {
-        const completed = await hasCompletedOnboarding(session.user.id);
-        router.push(completed ? "/equi/dashboard" : "/equi/onboarding");
+      try {
+        console.log("[LOGIN] Checking session...");
+        
+        // Add timeout to prevent hanging
+        const sessionPromise = getSession();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Session check timeout")), 5000)
+        );
+        
+        const { session } = await Promise.race([sessionPromise, timeoutPromise]) as any;
+        console.log("[LOGIN] Session check result:", session ? "user found" : "no session");
+        
+        if (session) {
+          console.log("[LOGIN] User id:", session.user.id);
+          
+          // Check onboarding with timeout
+          const onboardingPromise = hasCompletedOnboarding(session.user.id);
+          const onboardingTimeout = new Promise((resolve) => 
+            setTimeout(() => resolve(false), 5000)
+          );
+          const completed = await Promise.race([onboardingPromise, onboardingTimeout]) as boolean;
+          
+          console.log("[LOGIN] Onboarding completed:", completed);
+          router.push(completed ? "/equi/dashboard" : "/equi/onboarding");
+          return;
+        }
+      } catch (err) {
+        console.error("[LOGIN] Error checking session:", err);
       }
+      setIsCheckingAuth(false);
     };
     
     checkSession();
 
     const subscription = onAuthStateChange(async (event, session) => {
+      console.log("[LOGIN] Auth state change:", event, session ? "with session" : "no session");
       if (event === "SIGNED_IN" && session) {
-        const completed = await hasCompletedOnboarding(session.user.id);
-        router.push(completed ? "/equi/dashboard" : "/equi/onboarding");
+        try {
+          const completed = await hasCompletedOnboarding(session.user.id);
+          router.push(completed ? "/equi/dashboard" : "/equi/onboarding");
+        } catch (err) {
+          console.error("[LOGIN] Error in auth state change:", err);
+        }
       }
     });
 
@@ -48,6 +80,15 @@ export default function LoginPage() {
       }
     };
   }, [router]);
+
+  // Show loading while checking auth
+  if (!mounted || isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-[#fff] flex items-center justify-center">
+        <div className="text-xs uppercase tracking-widest text-[#666]">Loading...</div>
+      </div>
+    );
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
