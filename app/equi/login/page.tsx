@@ -129,7 +129,12 @@ export default function LoginPage() {
         if (signInError) {
           setError(signInError);
         } else if (user) {
-          const completed = await hasCompletedOnboarding(user.id);
+          // Check onboarding with timeout - if timeout, assume completed
+          const onboardingPromise = hasCompletedOnboarding(user.id);
+          const onboardingTimeout = new Promise<boolean>((resolve) => 
+            setTimeout(() => resolve(true), 15000)
+          );
+          const completed = await Promise.race([onboardingPromise, onboardingTimeout]);
           router.push(completed ? "/equi/dashboard" : "/equi/onboarding");
         }
       }
