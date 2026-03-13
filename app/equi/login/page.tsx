@@ -41,21 +41,13 @@ export default function LoginPage() {
         
         if (session) {
           console.log("[LOGIN] User id:", session.user.id);
-          
-          // #region agent debug log
-          fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'530277'},body:JSON.stringify({sessionId:'530277',location:'login/page.tsx:44',message:'Login checkSession found user',data:{userId:session.user.id},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
-          
+
           // Check onboarding - if timeout or error, assume completed to avoid blocking users
           const onboardingPromise = hasCompletedOnboarding(session.user.id);
           const onboardingTimeout = new Promise((resolve) => 
             setTimeout(() => resolve(true), 15000) // timeout = assume completed
           );
           const completed = await Promise.race([onboardingPromise, onboardingTimeout]) as boolean;
-          
-          // #region agent debug log
-          fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'530277'},body:JSON.stringify({sessionId:'530277',location:'login/page.tsx:52',message:'Login hasCompletedOnboarding result',data:{userId:session.user.id,completed},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
           
           console.log("[LOGIN] Final redirect decision:", {
             completed,
