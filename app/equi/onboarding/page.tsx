@@ -93,13 +93,19 @@ export default function EquiOnboarding() {
   // Auth check: redirect to dashboard if onboarding is already completed
   useEffect(() => {
     const checkOnboardingStatus = async () => {
+      console.log("[ONBOARDING] Checking onboarding status...");
       const { user } = await getUser();
+      console.log("[ONBOARDING] User found:", !!user);
       if (user) {
+        console.log("[ONBOARDING] User ID:", user.id);
         const completed = await hasCompletedOnboarding(user.id);
+        console.log("[ONBOARDING] Onboarding status from DB:", completed);
         if (completed) {
+          console.log("[ONBOARDING] Already completed, redirecting to /equi/dashboard");
           router.push("/equi/dashboard");
           return;
         }
+        console.log("[ONBOARDING] Not completed, showing onboarding");
       }
       setIsLoading(false);
     };
