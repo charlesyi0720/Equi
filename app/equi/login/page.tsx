@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { signIn, signUp, getSession, onAuthStateChange, hasCompletedOnboarding } from "../lib/auth";
+import { signIn, signUp, getSession, onAuthStateChange, getProfile } from "../lib/auth";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
@@ -42,12 +42,14 @@ export default function LoginPage() {
         if (session) {
           console.log("[LOGIN] User id:", session.user.id);
 
-          // Check onboarding - if timeout or error, assume completed to avoid blocking users
-          const onboardingPromise = hasCompletedOnboarding(session.user.id);
-          const onboardingTimeout = new Promise((resolve) => 
-            setTimeout(() => resolve(true), 15000) // timeout = assume completed
-          );
-          const completed = await Promise.race([onboardingPromise, onboardingTimeout]) as boolean;
+          // Get profile directly from DB - authoritative source
+          const { profile, error: profileError } = await getProfile(session.user.id);
+          console.log("[LOGIN] Profile data:", profile ? { 
+            id: profile.id, 
+            onboarding_completed: profile.onboarding_completed 
+          } : null);
+          
+          const completed = profile?.onboarding_completed === true;
           
           console.log("[LOGIN] Final redirect decision:", {
             completed,
@@ -69,7 +71,9 @@ export default function LoginPage() {
       console.log("[LOGIN] Auth state change:", event, session ? "with session" : "no session");
       if (event === "SIGNED_IN" && session) {
         try {
-          const completed = await hasCompletedOnboarding(session.user.id);
+          // Get profile directly from DB
+          const { profile } = await getProfile(session.user.id);
+          const completed = profile?.onboarding_completed === true;
           router.push(completed ? "/equi/dashboard" : "/equi/onboarding");
         } catch (err) {
           console.error("[LOGIN] Error in auth state change:", err);
@@ -129,12 +133,9 @@ export default function LoginPage() {
         if (signInError) {
           setError(signInError);
         } else if (user) {
-          // Check onboarding with timeout - if timeout, assume completed
-          const onboardingPromise = hasCompletedOnboarding(user.id);
-          const onboardingTimeout = new Promise<boolean>((resolve) => 
-            setTimeout(() => resolve(true), 15000)
-          );
-          const completed = await Promise.race([onboardingPromise, onboardingTimeout]);
+          // Get profile directly from DB
+          const { profile } = await getProfile(user.id);
+          const completed = profile?.onboarding_completed === true;
           router.push(completed ? "/equi/dashboard" : "/equi/onboarding");
         }
       }
