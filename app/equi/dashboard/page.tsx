@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { EquiUser } from "../types";
 import { supabase } from "../lib/supabase";
-import { getUser, onAuthStateChange, signOut } from "../lib/auth";
+import { getUser, onAuthStateChange, signOut, getProfile } from "../lib/auth";
 import { useRouter } from "next/navigation";
 
 // ============================================================================
@@ -34,6 +34,52 @@ export default function EquiDashboard() {
     await signOut();
     router.push("/equi/login");
   };
+
+  // Security check: ensure user has completed onboarding
+  useEffect(() => {
+    const checkAuthAndOnboarding = async () => {
+      console.log("[DASHBOARD] ===== Starting auth and onboarding check =====");
+      
+      // Step 1: Check if user is logged in
+      console.log("[DASHBOARD] Step 1: Checking user...");
+      const { user, error: userError } = await getUser();
+      
+      if (userError) {
+        console.log("[DASHBOARD] User error:", userError);
+      }
+      
+      console.log("[DASHBOARD] User logged in:", !!user);
+      
+      if (!user) {
+        console.log("[DASHBOARD] Not logged in, redirecting to /equi/login");
+        router.push("/equi/login");
+        return;
+      }
+      
+      console.log("[DASHBOARD] User ID:", user.id);
+      
+      // Step 2: Check if onboarding is completed
+      console.log("[DASHBOARD] Step 2: Checking onboarding status from DB...");
+      const { profile, error: profileError } = await getProfile(user.id);
+      
+      if (profileError) {
+        console.log("[DASHBOARD] Profile error:", profileError);
+      }
+      
+      const completed = profile?.onboarding_completed === true;
+      console.log("[DASHBOARD] Onboarding completed:", completed);
+      
+      if (!completed) {
+        console.log("[DASHBOARD] Onboarding not completed, redirecting to /equi/onboarding");
+        router.push("/equi/onboarding");
+        return;
+      }
+      
+      console.log("[DASHBOARD] ===== Auth check passed, loading data =====");
+    };
+    
+    checkAuthAndOnboarding();
+  }, [router]);
 
   // Load user data on mount
   useEffect(() => {

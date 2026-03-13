@@ -16,7 +16,7 @@ import { Step4Structures } from "./Step4";
 import { StepCalibration } from "./StepCalibration";
 import { LandingSection } from "./LandingSection";
 import { supabase, supabaseAdmin } from "../lib/supabase";
-import { getUser, updateProfile, hasCompletedOnboarding } from "../lib/auth";
+import { getUser, updateProfile, hasCompletedOnboarding, getProfile } from "../lib/auth";
 import { useRouter } from "next/navigation";
 
 // ============================================================================
@@ -93,22 +93,54 @@ export default function EquiOnboarding() {
   // Auth check: redirect to dashboard if onboarding is already completed
   useEffect(() => {
     const checkOnboardingStatus = async () => {
-      console.log("[ONBOARDING] Checking onboarding status...");
-      const { user } = await getUser();
-      console.log("[ONBOARDING] User found:", !!user);
-      if (user) {
-        console.log("[ONBOARDING] User ID:", user.id);
-        const completed = await hasCompletedOnboarding(user.id);
-        console.log("[ONBOARDING] Onboarding status from DB:", completed);
-        if (completed) {
-          console.log("[ONBOARDING] Already completed, redirecting to /equi/dashboard");
-          router.push("/equi/dashboard");
-          return;
-        }
-        console.log("[ONBOARDING] Not completed, showing onboarding");
+      console.log("[ONBOARDING] ===== Starting onboarding status check =====");
+      
+      // Step 1: Get user
+      console.log("[ONBOARDING] Step 1: Getting user...");
+      const { user, error: userError } = await getUser();
+      
+      if (userError) {
+        console.log("[ONBOARDING] User error:", userError);
       }
+      
+      console.log("[ONBOARDING] User found:", !!user);
+      
+      if (!user) {
+        console.log("[ONBOARDING] No user, staying on onboarding (login required)");
+        setIsLoading(false);
+        return;
+      }
+      
+      console.log("[ONBOARDING] User ID:", user.id);
+      
+      // Step 2: Get profile directly from DB (authoritative source)
+      console.log("[ONBOARDING] Step 2: Getting profile from DB...");
+      const { profile, error: profileError } = await getProfile(user.id);
+      
+      if (profileError) {
+        console.log("[ONBOARDING] Profile error:", profileError);
+      }
+      
+      console.log("[ONBOARDING] Profile data:", profile ? {
+        id: profile.id,
+        onboarding_completed: profile.onboarding_completed,
+        hasUserData: !!profile.user_data
+      } : null);
+      
+      // Step 3: Check completion status
+      const completed = profile?.onboarding_completed === true;
+      console.log("[ONBOARDING] Onboarding status from DB:", completed);
+      
+      if (completed) {
+        console.log("[ONBOARDING] ===== Already completed, redirecting to /equi/dashboard =====");
+        router.push("/equi/dashboard");
+        return;
+      }
+      
+      console.log("[ONBOARDING] Not completed, showing onboarding");
       setIsLoading(false);
     };
+    
     checkOnboardingStatus();
   }, [router]);
 
