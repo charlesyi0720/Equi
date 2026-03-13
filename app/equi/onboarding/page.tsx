@@ -58,41 +58,6 @@ function generateId(): string {
 export default function EquiOnboarding() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
-  
-  // Auth check: redirect to dashboard if onboarding is already completed
-  useEffect(() => {
-    const checkOnboardingStatus = async () => {
-      const { user } = await getUser();
-      if (user) {
-        const completed = await hasCompletedOnboarding(user.id);
-        if (completed) {
-          router.push("/equi/dashboard");
-          return;
-        }
-      }
-      setIsLoading(false);
-    };
-    checkOnboardingStatus();
-  }, [router]);
-  
-  // Show loading while checking auth status
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#fff] flex items-center justify-center">
-        <div className="text-xs uppercase tracking-widest text-[#666]">Loading...</div>
-      </div>
-    );
-  }
-  
-  // Global error handler for debugging
-  useEffect(() => {
-    const handleError = (event: ErrorEvent) => {
-      console.error('[DEBUG] Uncaught error:', event.message, 'at', event.filename, 'line', event.lineno);
-    };
-    window.addEventListener('error', handleError);
-    return () => window.removeEventListener('error', handleError);
-  }, []);
-  
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submittedUser, setSubmittedUser] = useState<EquiUser | null>(null);
@@ -100,12 +65,10 @@ export default function EquiOnboarding() {
     name: "",
     occupation: "",
     preferredTitle: "",
-    // Step 2: Behavioral Habits
     focusLevel: "",
     planningStyleAnswer: "",
     procrastinationAnswer: "",
     pressureAnswer: "",
-    // Step 4: MBTI Calibration
     understanding: {
       mbti: "INTJ",
     },
@@ -126,6 +89,36 @@ export default function EquiOnboarding() {
     updateFrequency: UpdateFrequency.Weekly,
     agentPersona: AgentPersona.DevotedSecretary,
   });
+
+  // Auth check: redirect to dashboard if onboarding is already completed
+  useEffect(() => {
+    const checkOnboardingStatus = async () => {
+      const { user } = await getUser();
+      if (user) {
+        const completed = await hasCompletedOnboarding(user.id);
+        if (completed) {
+          router.push("/equi/dashboard");
+          return;
+        }
+      }
+      setIsLoading(false);
+    };
+    checkOnboardingStatus();
+  }, [router]);
+
+  // Global error handler for debugging
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      console.error('[DEBUG] Uncaught error:', event.message, 'at', event.filename, 'line', event.lineno);
+    };
+    window.addEventListener('error', handleError);
+    return () => window.removeEventListener('error', handleError);
+  }, []);
+
+  // Scroll to top on step transition
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [currentStep]);
 
   const updateFormData = (data: Partial<typeof formData>) => {
     setFormData((prev) => ({ ...prev, ...data }));
@@ -438,6 +431,12 @@ export default function EquiOnboarding() {
 
   return (
     <div className="min-h-screen bg-[#fff] text-[#111] font-sans">
+      {isLoading ? (
+        <div className="min-h-screen bg-[#fff] flex items-center justify-center">
+          <div className="text-xs uppercase tracking-widest text-[#666]">Loading...</div>
+        </div>
+      ) : (
+      <>
       {/* Landing Section (Step 0) */}
       {currentStep === 0 ? (
         <LandingSection onStart={async () => {
@@ -568,6 +567,8 @@ export default function EquiOnboarding() {
         </AnimatePresence>
         </div>
         </>
+      )}
+      </>
       )}
     </div>
   );
