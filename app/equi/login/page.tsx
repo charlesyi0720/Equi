@@ -51,6 +51,7 @@ export default function LoginPage() {
           
           console.log("[LOGIN] Final redirect decision:", {
             completed,
+            completedType: typeof completed,
             willGoTo: completed ? "/equi/dashboard" : "/equi/onboarding"
           });
           router.push(completed ? "/equi/dashboard" : "/equi/onboarding");

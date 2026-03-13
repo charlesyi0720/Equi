@@ -342,9 +342,10 @@ export async function hasCompletedOnboarding(userId: string): Promise<boolean> {
     const { profile, error } = await Promise.race([profilePromise, profileTimeout]) as any;
 
     console.log("[AUTH DEBUG] hasCompletedOnboarding result:", {
-      profile: profile ? "exists" : null,
+      profile: profile ? JSON.stringify(profile) : null,
       error,
       completed: profile?.onboarding_completed,
+      completedType: typeof profile?.onboarding_completed,
       isTimeout: !profile && !error
     });
 
@@ -361,7 +362,11 @@ export async function hasCompletedOnboarding(userId: string): Promise<boolean> {
 
     const result = profile.onboarding_completed === true;
     
-    console.log("[AUTH DEBUG] hasCompletedOnboarding returning:", result);
+    console.log("[AUTH DEBUG] hasCompletedOnboarding returning:", {
+      result,
+      profileOnboardingCompleted: profile.onboarding_completed,
+      comparison: profile.onboarding_completed === true
+    });
     return result;
   } catch (err) {
     console.log("[AUTH DEBUG] hasCompletedOnboarding exception:", err);
