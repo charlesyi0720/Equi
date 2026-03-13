@@ -107,16 +107,7 @@ export default function EquiOnboarding() {
     };
     checkOnboardingStatus();
   }, [router]);
-  
-  // Show loading while checking auth status
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#fff] flex items-center justify-center">
-        <div className="text-xs uppercase tracking-widest text-[#666]">Loading...</div>
-      </div>
-    );
-  }
-  
+
   // Global error handler for debugging
   useEffect(() => {
     const handleError = (event: ErrorEvent) => {
@@ -126,20 +117,12 @@ export default function EquiOnboarding() {
     return () => window.removeEventListener('error', handleError);
   }, []);
   
-  const updateFormData = (data: Partial<typeof formData>) => {
-    setFormData((prev) => ({ ...prev, ...data }));
-  };
-
-  const nextStep = () => setCurrentStep((prev) => Math.min(prev + 1, 7));
-  const prevStep = () => setCurrentStep((prev) => Math.max(prev - 1, 0));
-
   // Scroll to top on step transition
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [currentStep]);
 
-  // Hydration: Load data from Supabase on mount
-  useEffect(() => {
+  const updateFormData = (data: Partial<typeof formData>) => {
     const loadUserData = async () => {
       // Get user from Supabase auth
       const { user } = await getUser();
@@ -437,6 +420,14 @@ export default function EquiOnboarding() {
 
   return (
     <div className="min-h-screen bg-[#fff] text-[#111] font-sans">
+      {/* Show loading while checking auth status */}
+      {isLoading && (
+        <div className="min-h-screen bg-[#fff] flex items-center justify-center">
+          <div className="text-xs uppercase tracking-widest text-[#666]">Loading...</div>
+        </div>
+      )}
+
+      {!isLoading && (
       {/* Landing Section (Step 0) */}
       {currentStep === 0 ? (
         <LandingSection onStart={async () => {
@@ -571,10 +562,6 @@ export default function EquiOnboarding() {
     </div>
   );
 }
-
-// ============================================================================
-// STEP 1: IDENTITY
-// ============================================================================
 
 interface Step1IdentityProps {
   formData: { name: string; occupation: string; preferredTitle: string };
