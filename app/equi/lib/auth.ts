@@ -346,7 +346,7 @@ export async function hasCompletedOnboarding(userId: string): Promise<boolean> {
     const { profile, error } = await Promise.race([profilePromise, profileTimeout]) as any;
 
     console.log("[AUTH DEBUG] hasCompletedOnboarding result:", {
-      profile: profile ? "exists" : null,
+      profile: profile ? JSON.stringify(profile) : null,
       error,
       completed: profile?.onboarding_completed,
       isTimeout: !profile && !error
