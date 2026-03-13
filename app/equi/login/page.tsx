@@ -12,6 +12,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const router = useRouter();
 
   // Check for mode=signup query param
@@ -21,8 +22,6 @@ export default function LoginPage() {
       setIsSignUp(true);
     }
   }, []);
-
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   useEffect(() => {
     setMounted(true);
