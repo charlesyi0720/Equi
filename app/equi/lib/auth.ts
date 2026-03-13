@@ -333,10 +333,10 @@ export async function hasCompletedOnboarding(userId: string): Promise<boolean> {
   try {
     console.log("[AUTH DEBUG] hasCompletedOnboarding checking for:", userId);
     
-    // Add timeout to getProfile
+    // Increase timeout to 15 seconds
     const profilePromise = getProfile(userId);
     const profileTimeout = new Promise<{ profile: null, error: null }>((resolve) =>
-      setTimeout(() => resolve({ profile: null, error: null }), 8000)
+      setTimeout(() => resolve({ profile: null, error: null }), 15000)
     );
     
     const { profile, error } = await Promise.race([profilePromise, profileTimeout]) as any;
@@ -344,8 +344,15 @@ export async function hasCompletedOnboarding(userId: string): Promise<boolean> {
     console.log("[AUTH DEBUG] hasCompletedOnboarding result:", {
       profile: profile ? "exists" : null,
       error,
-      completed: profile?.onboarding_completed
+      completed: profile?.onboarding_completed,
+      isTimeout: !profile && !error
     });
+
+    // If timed out, treat as completed (user has data but query is slow)
+    if (!profile && !error) {
+      console.log("[AUTH DEBUG] hasCompletedOnboarding timed out, assuming completed");
+      return true;
+    }
 
     if (error || !profile) {
       console.log("[AUTH DEBUG] hasCompletedOnboarding returning false due to error or no profile");
