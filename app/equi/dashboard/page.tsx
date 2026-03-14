@@ -123,8 +123,6 @@ export default function EquiDashboard() {
   const initializeDashboard = async (retryCount = 0) => {
     const MAX_RETRIES = 2;
     
-    console.log('[DEBUG] Dashboard: Starting clean fetch, attempt', retryCount + 1);
-
     try {
       // 1. Lightweight auth check using getUser (not getSession - avoids polling deadlock)
       if (!supabase) {
@@ -134,17 +132,13 @@ export default function EquiDashboard() {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       
       if (authError) {
-        console.error('[DEBUG] Dashboard: Auth error:', authError);
         throw new Error(`Authentication failed: ${authError.message}`);
       }
 
       if (!user) {
-        console.log('[DEBUG] Dashboard: No user, redirecting to login');
         window.location.href = "/equi/login";
         return;
       }
-
-      console.log('[DEBUG] Dashboard: User authenticated:', user.id);
 
       // 2. Precise profile fetch using maybeSingle
       const { data: profile, error: profileError } = await supabase
@@ -154,18 +148,11 @@ export default function EquiDashboard() {
         .maybeSingle();
 
       if (profileError) {
-        console.error('[DEBUG] Dashboard: Profile error:', profileError);
         throw new Error(`Failed to load profile: ${profileError.message}`);
       }
 
-      console.log('[DEBUG] Dashboard: Profile fetched:', { 
-        hasProfile: !!profile, 
-        onboardingCompleted: profile?.onboarding_completed 
-      });
-
       // 3. Check onboarding status
       if (!profile || !profile.onboarding_completed) {
-        console.log('[DEBUG] Dashboard: Onboarding not completed, redirecting');
         window.location.href = "/equi/onboarding";
         return;
       }
@@ -174,15 +161,11 @@ export default function EquiDashboard() {
       if (isMountedRef.current) {
         setUserData(profile.user_data as EquiUser);
         setIsLoading(false);
-        console.log('[DEBUG] Dashboard: Successfully loaded from Supabase');
       }
 
     } catch (err: any) {
-      console.error('[DEBUG] Dashboard: FATAL ERROR:', err?.message);
-      
       // Retry logic
       if (retryCount < MAX_RETRIES) {
-        console.log('[DEBUG] Dashboard: Retrying...', retryCount + 1, '/', MAX_RETRIES);
         await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
         if (isMountedRef.current) {
           initializeDashboard(retryCount + 1);
@@ -212,8 +195,6 @@ export default function EquiDashboard() {
     if (!supabase) return;
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('[DEBUG] Dashboard: Auth state changed:', event);
-
       if (event === "SIGNED_IN" && session) {
         initializeDashboard();
       } else if (event === "SIGNED_OUT") {
