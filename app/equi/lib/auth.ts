@@ -117,14 +117,21 @@ export async function getSession() {
  * Get current user
  */
 export async function getUser() {
+  console.log('[DEBUG] getUser called');
+  console.log('[DEBUG] supabase available:', !!supabase);
+  
   if (!supabase) {
+    console.log('[DEBUG] getUser: supabase not initialized');
     return { user: null, error: "Supabase not initialized" };
   }
 
   try {
+    console.log('[DEBUG] getUser: calling supabase.auth.getUser()');
     const { data: { user }, error } = await supabase.auth.getUser();
+    console.log('[DEBUG] getUser result:', { hasUser: !!user, error });
     return { user: user as AuthUser | null, error: error?.message || null };
   } catch (err) {
+    console.log('[DEBUG] getUser exception:', err);
     return { user: null, error: "An unexpected error occurred" };
   }
 }

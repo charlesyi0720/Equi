@@ -38,31 +38,42 @@ export default function EquiDashboard() {
   // Security check: ensure user has completed onboarding
   useEffect(() => {
     const checkAuthAndOnboarding = async () => {
+      console.log('[DEBUG] Dashboard: Starting auth check');
+      
       // Step 1: Check if user is logged in
+      console.log('[DEBUG] Dashboard: Calling getUser()');
       const { user, error: userError } = await getUser();
+      console.log('[DEBUG] Dashboard: getUser returned', { user: !!user, error: userError });
       
       if (userError) {
         console.error("User error:", userError);
       }
       
       if (!user) {
+        console.log('[DEBUG] Dashboard: No user, redirecting to login');
         router.push("/equi/login");
         return;
       }
       
       // Step 2: Check if onboarding is completed
+      console.log('[DEBUG] Dashboard: Calling getProfile() for user:', user.id);
       const { profile, error: profileError } = await getProfile(user.id);
+      console.log('[DEBUG] Dashboard: getProfile returned', { hasProfile: !!profile, error: profileError });
       
       if (profileError) {
         console.error("Profile error:", profileError);
       }
       
       const completed = profile?.onboarding_completed === true;
+      console.log('[DEBUG] Dashboard: onboarding_completed =', completed);
       
       if (!completed) {
+        console.log('[DEBUG] Dashboard: Not completed, redirecting to onboarding');
         router.push("/equi/onboarding");
         return;
       }
+      
+      console.log('[DEBUG] Dashboard: Auth check passed, showing content');
     };
     
     checkAuthAndOnboarding();
