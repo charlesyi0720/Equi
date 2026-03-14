@@ -93,25 +93,32 @@ export default function EquiOnboarding() {
   // Auth check: redirect to dashboard if onboarding is already completed
   useEffect(() => {
     const checkOnboardingStatus = async () => {
+      console.log('[ONBOARDING] checkOnboardingStatus started');
+      
       // Step 1: Get user
+      console.log('[ONBOARDING] Calling getUser...');
       const { user, error: userError } = await getUser();
+      console.log('[ONBOARDING] getUser result:', { hasUser: !!user, error: userError });
 
       if (userError) {
-        console.error("User error:", userError);
+        console.error("[ONBOARDING] User error:", userError);
         // If it's a timeout error, still try to proceed - user might be logged in
         if (userError.includes('Timeout')) {
-          console.log("Timeout fetching user, checking localStorage for session...");
+          console.log("[ONBOARDING] Timeout fetching user, checking localStorage for session...");
           // Try to get session directly
           const { session } = await getSession();
+          console.log('[ONBOARDING] getSession result:', { hasSession: !!session });
           if (session?.user) {
-            console.log("Found user from session:", session.user);
+            console.log("[ONBOARDING] Found user from session:", session.user);
             // Continue with session user
             const { profile, error: profileError } = await getProfile(session.user.id);
             if (profileError) {
-              console.error("Profile error:", profileError);
+              console.error("[ONBOARDING] Profile error:", profileError);
             }
             const completed = profile?.onboarding_completed === true;
+            console.log('[ONBOARDING] Profile check:', { completed, profile });
             if (completed) {
+              console.log('[ONBOARDING] Redirecting to dashboard (session path)');
               router.push("/equi/dashboard");
               return;
             }
@@ -122,26 +129,32 @@ export default function EquiOnboarding() {
       }
 
       if (!user) {
+        console.log('[ONBOARDING] No user found, showing landing section');
         setIsLoading(false);
         return;
       }
 
       // Step 2: Get profile directly from DB (authoritative source)
+      console.log('[ONBOARDING] Getting profile for user:', user.id);
       const { profile, error: profileError } = await getProfile(user.id);
+      console.log('[ONBOARDING] Profile result:', { profile, error: profileError });
 
       if (profileError) {
-        console.error("Profile error:", profileError);
+        console.error("[ONBOARDING] Profile error:", profileError);
       }
 
       // Step 3: Check completion status
       const completed = profile?.onboarding_completed === true;
+      console.log('[ONBOARDING] Completed status:', completed);
 
       if (completed) {
+        console.log('[ONBOARDING] Redirecting to dashboard (profile path)');
         router.push("/equi/dashboard");
         return;
       }
 
       setIsLoading(false);
+      console.log('[ONBOARDING] Onboarding not completed, showing form');
     };
 
     checkOnboardingStatus();
