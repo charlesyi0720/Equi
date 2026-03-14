@@ -127,12 +127,22 @@ export async function getUser() {
 
   try {
     console.log('[DEBUG] getUser: calling supabase.auth.getUser()');
-    const { data: { user }, error } = await supabase.auth.getUser();
+    
+    // Add timeout wrapper
+    const timeoutPromise = new Promise<never>((_, reject) => 
+      setTimeout(() => reject(new Error('Timeout fetching user')), 10000)
+    );
+    
+    const userPromise = supabase.auth.getUser();
+    
+    const result = await Promise.race([userPromise, timeoutPromise]) as any;
+    const { data: { user }, error } = result;
+    
     console.log('[DEBUG] getUser result:', { hasUser: !!user, error });
     return { user: user as AuthUser | null, error: error?.message || null };
-  } catch (err) {
-    console.log('[DEBUG] getUser exception:', err);
-    return { user: null, error: "An unexpected error occurred" };
+  } catch (err: any) {
+    console.log('[DEBUG] getUser exception:', err?.message || err);
+    return { user: null, error: err?.message || "An unexpected error occurred" };
   }
 }
 
