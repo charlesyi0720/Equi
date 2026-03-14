@@ -125,15 +125,46 @@ export default function EquiDashboard() {
 
       console.log('[DEBUG] Dashboard: Starting parallel auth check');
 
+      // Create a master timeout - don't wait forever
+      const TIMEOUT_MS = 8000; // 8 seconds max
+      
       try {
-        // PARALLEL REQUEST: Get user and profile simultaneously
-        // This is the key optimization - no sequential waiting
-        const [userResult, sessionResult] = await Promise.all([
-          // Promise 1: getUser (validates with Supabase)
+        // PARALLEL REQUEST: Get user and profile simultaneously with timeout
+        const authPromise = Promise.all([
           getUser().catch(err => ({ user: null, error: err.message })),
-          // Promise 2: getSession (local cache, faster but may be stale)
           supabase?.auth.getSession().catch(err => ({ data: { session: null }, error: err.message })) || { data: { session: null }, error: 'supabase not initialized' }
         ]);
+
+        const timeoutPromise = new Promise<null>((_, reject) => 
+          setTimeout(() => reject(new Error('Auth timeout')), TIMEOUT_MS)
+        );
+
+        let userResult: any;
+        let sessionResult: any;
+        
+        try {
+          [userResult, sessionResult] = await Promise.race([authPromise, timeoutPromise]) as any;
+        } catch (timeoutErr: any) {
+          console.log('[DEBUG] Dashboard: Auth timed out after', TIMEOUT_MS, 'ms');
+          // Timeout - check localStorage as last resort
+          const savedUserData = localStorage.getItem("EQUI_USER_DATA");
+          if (savedUserData) {
+            try {
+              const parsed = JSON.parse(savedUserData);
+              setUserData(parsed);
+              setAuthStatus("authenticated");
+              console.log('[DEBUG] Dashboard: Using localStorage fallback after timeout');
+              setIsLoading(false);
+              return;
+            } catch (e) {
+              console.error('[DEBUG] Dashboard: Failed to parse localStorage');
+            }
+          }
+          // No localStorage, redirect to login
+          router.push("/equi/login");
+          setIsLoading(false);
+          return;
+        }
 
         console.log('[DEBUG] Dashboard: Parallel results:', {
           getUser: !!userResult.user,
@@ -176,6 +207,20 @@ export default function EquiDashboard() {
 
       } catch (err: any) {
         console.error('[DEBUG] Dashboard: Auth check failed:', err?.message);
+        
+        // Last resort: try localStorage
+        const savedUserData = localStorage.getItem("EQUI_USER_DATA");
+        if (savedUserData) {
+          try {
+            const parsed = JSON.parse(savedUserData);
+            setUserData(parsed);
+            setAuthStatus("authenticated");
+            console.log('[DEBUG] Dashboard: Using localStorage fallback after error');
+            setIsLoading(false);
+            return;
+          } catch (e) {}
+        }
+        
         setAuthStatus("unauthenticated");
         router.push("/equi/login");
       } finally {

@@ -1,10 +1,10 @@
 {
   "/_not-found/page": "app/_not-found/page.js",
   "/equi/dashboard/page": "app/equi/dashboard/page.js",
-  "/api/vision/route": "app/api/vision/route.js",
-  "/page": "app/page.js",
-  "/equi/page": "app/equi/page.js",
   "/equi/login/page": "app/equi/login/page.js",
   "/api/synthesis/route": "app/api/synthesis/route.js",
+  "/equi/page": "app/equi/page.js",
+  "/page": "app/page.js",
+  "/api/vision/route": "app/api/vision/route.js",
   "/equi/onboarding/page": "app/equi/onboarding/page.js"
 }
