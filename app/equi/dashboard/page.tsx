@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { EquiUser } from "../types";
 import { supabase } from "../lib/supabase";
-import { getUser, onAuthStateChange, signOut, getProfile, getSession } from "../lib/auth";
+import { getUser, onAuthStateChange, signOut, getProfile } from "../lib/auth";
 import { useRouter } from "next/navigation";
 
 // ============================================================================
@@ -18,137 +18,214 @@ interface Message {
 }
 
 // ============================================================================
+// SKELETON LOADER COMPONENTS
+// ============================================================================
+
+function DashboardSkeleton() {
+  return (
+    <div className="min-h-screen bg-[#fff] text-[#111] font-sans">
+      {/* Header Skeleton */}
+      <header className="border-b border-[#eee] px-6 py-4 animate-pulse">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <div>
+            <div className="h-6 w-16 bg-[#eee] rounded"></div>
+            <div className="h-3 w-40 bg-[#eee] rounded mt-1"></div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <div className="h-4 w-20 bg-[#eee] rounded"></div>
+              <div className="h-3 w-16 bg-[#eee] rounded mt-1"></div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Grid Skeleton */}
+      <div className="max-w-7xl mx-auto grid grid-cols-12 min-h-[calc(100vh-80px)]">
+        {/* SECTION A: Profile Skeleton */}
+        <section className="col-span-3 border-r border-[#eee] p-6">
+          <div className="space-y-8 animate-pulse">
+            <div>
+              <div className="h-3 w-16 bg-[#eee] rounded mb-4"></div>
+              <div className="space-y-3">
+                <div className="h-4 w-full bg-[#eee] rounded"></div>
+                <div className="h-4 w-3/4 bg-[#eee] rounded"></div>
+              </div>
+            </div>
+            <div>
+              <div className="h-3 w-24 bg-[#eee] rounded mb-4"></div>
+              <div className="space-y-3">
+                <div className="h-4 w-full bg-[#eee] rounded"></div>
+                <div className="h-4 w-2/3 bg-[#eee] rounded"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* SECTION B: Chat Skeleton */}
+        <section className="col-span-6 flex flex-col border-r border-[#eee]">
+          <div className="px-6 py-4 border-b border-[#eee]">
+            <div className="h-3 w-24 bg-[#eee] rounded animate-pulse"></div>
+          </div>
+          <div className="flex-1 p-6 space-y-4">
+            <div className="h-16 w-3/4 bg-[#eee] rounded"></div>
+            <div className="h-16 w-1/2 bg-[#eee] rounded ml-auto"></div>
+            <div className="h-20 w-2/3 bg-[#eee] rounded"></div>
+          </div>
+          <div className="px-6 py-4 border-t border-[#eee]">
+            <div className="h-10 w-full bg-[#eee] rounded"></div>
+          </div>
+        </section>
+
+        {/* SECTION C: Stats Skeleton */}
+        <section className="col-span-3 p-6">
+          <div className="space-y-8 animate-pulse">
+            <div>
+              <div className="h-3 w-12 bg-[#eee] rounded mb-4"></div>
+              <div className="space-y-3">
+                <div className="h-20 bg-[#eee] rounded"></div>
+                <div className="h-20 bg-[#eee] rounded"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
 // DASHBOARD COMPONENT
 // ============================================================================
 
 export default function EquiDashboard() {
   const [userData, setUserData] = useState<EquiUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [authStatus, setAuthStatus] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const authCheckedRef = useRef(false);
 
   const handleLogout = async () => {
     await signOut();
     router.push("/equi/login");
   };
 
-  // Security check + load user data: combined into one effect
+  // ============================================================================
+  // PARALLEL AUTH + PROFILE FETCH
+  // Uses Promise.all for parallel requests, Supabase is single source of truth
+  // ============================================================================
   useEffect(() => {
-    const checkAuthAndLoadData = async () => {
-      console.log('[DEBUG] Dashboard: Starting auth check + data load');
-      
-      // Step 1: Try to get session from localStorage first (instant)
-      let sessionUser = null;
-      const savedUserData = localStorage.getItem("EQUI_USER_DATA");
-      
-      if (savedUserData) {
-        try {
-          const parsed = JSON.parse(savedUserData);
-          setUserData(parsed);
-          console.log('[DEBUG] Dashboard: Loaded user data from localStorage');
-        } catch (e) {
-          console.error("Error parsing saved user data:", e);
-        }
-      }
-      
-      // Step 2: Try to get session (fast path with short timeout)
-      console.log('[DEBUG] Dashboard: Trying getSession (5s timeout)...');
+    const checkAuth = async () => {
+      if (authCheckedRef.current) return;
+      authCheckedRef.current = true;
+
+      console.log('[DEBUG] Dashboard: Starting parallel auth check');
+
       try {
-        const sessionPromise = getSession();
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Session timeout')), 5000)
-        );
-        
-        const { session, error } = await Promise.race([sessionPromise, timeoutPromise]) as any;
-        console.log('[DEBUG] Dashboard: getSession result:', { hasSession: !!session, error });
-        
-        if (session?.user) {
-          sessionUser = session.user;
-        }
-      } catch (e: any) {
-        console.log('[DEBUG] Dashboard: getSession failed:', e?.message);
-        
-        // If we have localStorage data, use it - user is likely logged in
-        if (savedUserData) {
-          console.log('[DEBUG] Dashboard: Using localStorage data, assuming logged in');
-          setIsLoading(false);
+        // PARALLEL REQUEST: Get user and profile simultaneously
+        // This is the key optimization - no sequential waiting
+        const [userResult, sessionResult] = await Promise.all([
+          // Promise 1: getUser (validates with Supabase)
+          getUser().catch(err => ({ user: null, error: err.message })),
+          // Promise 2: getSession (local cache, faster but may be stale)
+          supabase.auth.getSession().catch(err => ({ data: { session: null }, error: err.message }))
+        ]);
+
+        console.log('[DEBUG] Dashboard: Parallel results:', {
+          getUser: !!userResult.user,
+          getSession: !!sessionResult.data?.session
+        });
+
+        // Use getUser result as authoritative (validated with Supabase)
+        const user = userResult.user || sessionResult.data?.session?.user;
+
+        if (!user) {
+          console.log('[DEBUG] Dashboard: No user found, redirecting to login');
+          setAuthStatus("unauthenticated");
+          router.push("/equi/login");
           return;
         }
-      }
-      
-      // If no session and no localStorage, redirect to login
-      if (!sessionUser && !savedUserData) {
-        console.log('[DEBUG] Dashboard: No session, redirecting to login');
-        router.push("/equi/login");
-        return;
-      }
-      
-      // Step 3: If we have session user, check profile
-      if (sessionUser) {
-        console.log('[DEBUG] Dashboard: Have session user, checking profile:', sessionUser.id);
-        
-        // Try to get profile with timeout
-        try {
-          const profilePromise = getProfile(sessionUser.id);
-          const profileTimeout = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Profile timeout')), 10000)
-          );
-          
-          const { profile, error } = await Promise.race([profilePromise, profileTimeout]) as any;
-          console.log('[DEBUG] Dashboard: getProfile result:', { hasProfile: !!profile, error });
-          
-          if (profile?.onboarding_completed !== true) {
-            console.log('[DEBUG] Dashboard: Onboarding not completed, redirecting');
-            router.push("/equi/onboarding");
-            return;
-          }
-        } catch (profileErr: any) {
-          console.log('[DEBUG] Dashboard: Profile check failed:', profileErr?.message);
-          // If we have localStorage and session, assume profile is OK
+
+        console.log('[DEBUG] Dashboard: User authenticated:', user.id);
+
+        // Get profile from Supabase (single source of truth)
+        const { profile, error: profileError } = await getProfile(user.id);
+
+        if (profileError) {
+          console.error('[DEBUG] Dashboard: Profile error:', profileError);
         }
+
+        // Check onboarding status
+        if (profile?.onboarding_completed !== true) {
+          console.log('[DEBUG] Dashboard: Onboarding not completed, redirecting');
+          router.push("/equi/onboarding");
+          return;
+        }
+
+        // Set user data from Supabase profile
+        if (profile?.user_data) {
+          setUserData(profile.user_data);
+        }
+
+        setAuthStatus("authenticated");
+        console.log('[DEBUG] Dashboard: Auth check passed');
+
+      } catch (err: any) {
+        console.error('[DEBUG] Dashboard: Auth check failed:', err?.message);
+        setAuthStatus("unauthenticated");
+        router.push("/equi/login");
+      } finally {
+        setIsLoading(false);
       }
-      
-      console.log('[DEBUG] Dashboard: Auth check passed, showing content');
-      setIsLoading(false);
     };
-    
-    checkAuthAndLoadData();
+
+    checkAuth();
   }, [router]);
 
-  // Listen for auth changes
-    const subscription = onAuthStateChange(async (event, session) => {
+  // ============================================================================
+  // REAL-TIME AUTH STATE LISTENER
+  // Uses onAuthStateChange for instant login detection
+  // ============================================================================
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[DEBUG] Dashboard: Auth state changed:', event);
+
       if (event === "SIGNED_IN" && session) {
-        // Reload user data when signed in
-        if (!supabase) return;
-        const { data } = await supabase.from("profiles").select("user_data").eq("id", session.user.id).single();
-        if (data?.user_data) {
-          setUserData(data.user_data);
-          localStorage.setItem("EQUI_USER_DATA", JSON.stringify(data.user_data));
+        console.log('[DEBUG] Dashboard: User signed in, loading profile...');
+        
+        // Immediately fetch profile on sign in
+        const { profile } = await getProfile(session.user.id);
+        if (profile?.user_data) {
+          setUserData(profile.user_data);
+          setAuthStatus("authenticated");
         }
+      } else if (event === "SIGNED_OUT") {
+        console.log('[DEBUG] Dashboard: User signed out');
+        setAuthStatus("unauthenticated");
+        router.push("/equi/login");
       }
     });
 
     return () => {
-      if (subscription && 'unsubscribe' in subscription) {
-        subscription.unsubscribe();
-      }
+      subscription.unsubscribe();
     };
-  }, []);
-
-  // Auto-trigger opening message when user data loads
-  useEffect(() => {
-    if (userData && messages.length === 0) {
-      generateOpeningMessage();
-    }
-  }, [userData]);
+  }, [router]);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Auto-trigger opening message when user data loads
+  useEffect(() => {
+    if (userData && messages.length === 0 && authStatus === "authenticated") {
+      generateOpeningMessage();
+    }
+  }, [userData, authStatus]);
 
   // Generate opening message
   const generateOpeningMessage = async () => {
@@ -273,22 +350,18 @@ export default function EquiDashboard() {
     }
   };
 
+  // ============================================================================
+  // RENDER: Show skeleton while loading, then actual content
+  // ============================================================================
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#fff] flex items-center justify-center">
-        <div className="text-xs uppercase tracking-widest text-[#666]">Loading...</div>
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
-  if (!userData) {
+  if (authStatus === "unauthenticated" || !userData) {
     return (
       <div className="min-h-screen bg-[#fff] flex items-center justify-center">
         <div className="text-center space-y-4">
-          <div className="text-lg">No user data found</div>
-          <a href="/equi/onboarding" className="text-xs underline text-[#666]">
-            Go to Onboarding
-          </a>
+          <div className="text-lg">Redirecting...</div>
         </div>
       </div>
     );
