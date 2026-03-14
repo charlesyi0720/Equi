@@ -28,8 +28,6 @@ export default function LoginPage() {
     
     const checkSession = async () => {
       try {
-        console.log("[LOGIN] Checking session...");
-        
         // Add timeout to prevent hanging
         const sessionPromise = getSession();
         const timeoutPromise = new Promise((_, reject) => 
@@ -37,30 +35,19 @@ export default function LoginPage() {
         );
         
         const { session } = await Promise.race([sessionPromise, timeoutPromise]) as any;
-        console.log("[LOGIN] Session check result:", session ? "user found" : "no session");
         
         if (session) {
-          console.log("[LOGIN] User id:", session.user.id);
 
           // Get profile directly from DB - authoritative source
           const { profile, error: profileError } = await getProfile(session.user.id);
-          console.log("[LOGIN] Profile data:", profile ? { 
-            id: profile.id, 
-            onboarding_completed: profile.onboarding_completed 
-          } : null);
           
           const completed = profile?.onboarding_completed === true;
           
-          console.log("[LOGIN] Final redirect decision:", {
-            completed,
-            completedType: typeof completed,
-            willGoTo: completed ? "/equi/dashboard" : "/equi/onboarding"
-          });
           router.push(completed ? "/equi/dashboard" : "/equi/onboarding");
           return;
         }
       } catch (err) {
-        console.error("[LOGIN] Error checking session:", err);
+        console.error("Error checking session:", err);
       }
       setIsCheckingAuth(false);
     };
@@ -68,7 +55,6 @@ export default function LoginPage() {
     checkSession();
 
     const subscription = onAuthStateChange(async (event, session) => {
-      console.log("[LOGIN] Auth state change:", event, session ? "with session" : "no session");
       if (event === "SIGNED_IN" && session) {
         try {
           // Get profile directly from DB
@@ -76,7 +62,7 @@ export default function LoginPage() {
           const completed = profile?.onboarding_completed === true;
           router.push(completed ? "/equi/dashboard" : "/equi/onboarding");
         } catch (err) {
-          console.error("[LOGIN] Error in auth state change:", err);
+          console.error("Error in auth state change:", err);
         }
       }
     });

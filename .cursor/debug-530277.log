@@ -7,3 +7,4 @@
 {"sessionId":"530277","location":"auth.ts:336","message":"hasCompletedOnboarding checking","data":{"userId":"ef647872-0f5c-4113-ab1a-546445de9ecc"},"timestamp":1773404584909}
 {"sessionId":"530277","location":"auth.ts:336","message":"hasCompletedOnboarding checking","data":{"userId":"ef647872-0f5c-4113-ab1a-546445de9ecc"},"timestamp":1773404585282}
 {"sessionId":"530277","location":"auth.ts:336","message":"hasCompletedOnboarding checking","data":{"userId":"ef647872-0f5c-4113-ab1a-546445de9ecc"},"timestamp":1773404586784}
+{"sessionId":"530277","location":"dashboard/page.tsx:checkAuthAndOnboarding","message":"Starting auth check","timestamp":1773448591698}

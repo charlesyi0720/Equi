@@ -162,9 +162,6 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
       }
 
       const schedules: ImportedSchedule[] = events.map((e) => {
-        // #region agent log
-        console.log('[DEBUG] Step4 ICS event:', { label: e?.label, day: e?.day, startHour: e?.startHour, endHour: e?.endHour, startMinute: e?.startMinute, endMinute: e?.endMinute });
-        // #endregion
         return {
           id: e.id,
           label: e.label,
@@ -214,9 +211,6 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
       const result = await response.json();
 
       if (result.activities && result.activities.length > 0) {
-        // #region agent log
-        console.log('[DEBUG] Vision API result.activities:', { count: result.activities.length, first: result.activities[0] });
-        // #endregion
         const schedules: ImportedSchedule[] = result.activities.map((a: ImportedSchedule) => ({
           id: a.id || generateId(),
           label: a.label,
@@ -279,9 +273,7 @@ export function Step4Structures({ formData, updateFormData, onNext, onBack }: St
   };
 
   const confirmImport = () => {
-    // #region agent log
-    console.log('[DEBUG] Step4 confirmImport - importedSchedules:', importedSchedules);
-    // #endregion
+    // Proceed with import
     
     // Group by label to create activities
     const activityMap = new Map<string, ActivityForm>();
