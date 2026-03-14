@@ -128,9 +128,9 @@ export async function getUser() {
   try {
     console.log('[DEBUG] getUser: calling supabase.auth.getUser()');
     
-    // Add timeout wrapper
+    // Add timeout wrapper - increased to 30 seconds for slow connections
     const timeoutPromise = new Promise<never>((_, reject) => 
-      setTimeout(() => reject(new Error('Timeout fetching user')), 10000)
+      setTimeout(() => reject(new Error('Timeout fetching user')), 30000)
     );
     
     const userPromise = supabase.auth.getUser();

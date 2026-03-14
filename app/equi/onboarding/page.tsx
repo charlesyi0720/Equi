@@ -16,7 +16,7 @@ import { Step4Structures } from "./Step4";
 import { StepCalibration } from "./StepCalibration";
 import { LandingSection } from "./LandingSection";
 import { supabase, supabaseAdmin } from "../lib/supabase";
-import { getUser, updateProfile, hasCompletedOnboarding, getProfile } from "../lib/auth";
+import { getUser, updateProfile, hasCompletedOnboarding, getProfile, getSession } from "../lib/auth";
 import { useRouter } from "next/navigation";
 
 // ============================================================================
@@ -95,34 +95,55 @@ export default function EquiOnboarding() {
     const checkOnboardingStatus = async () => {
       // Step 1: Get user
       const { user, error: userError } = await getUser();
-      
+
       if (userError) {
         console.error("User error:", userError);
+        // If it's a timeout error, still try to proceed - user might be logged in
+        if (userError.includes('Timeout')) {
+          console.log("Timeout fetching user, checking localStorage for session...");
+          // Try to get session directly
+          const { session } = await getSession();
+          if (session?.user) {
+            console.log("Found user from session:", session.user);
+            // Continue with session user
+            const { profile, error: profileError } = await getProfile(session.user.id);
+            if (profileError) {
+              console.error("Profile error:", profileError);
+            }
+            const completed = profile?.onboarding_completed === true;
+            if (completed) {
+              router.push("/equi/dashboard");
+              return;
+            }
+            setIsLoading(false);
+            return;
+          }
+        }
       }
-      
+
       if (!user) {
         setIsLoading(false);
         return;
       }
-      
+
       // Step 2: Get profile directly from DB (authoritative source)
       const { profile, error: profileError } = await getProfile(user.id);
-      
+
       if (profileError) {
         console.error("Profile error:", profileError);
       }
-      
+
       // Step 3: Check completion status
       const completed = profile?.onboarding_completed === true;
-      
+
       if (completed) {
         router.push("/equi/dashboard");
         return;
       }
-      
+
       setIsLoading(false);
     };
-    
+
     checkOnboardingStatus();
   }, [router]);
 

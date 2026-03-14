@@ -1,0 +1,34 @@
+---
+description: Auto-commit and push all code changes to GitHub
+alwaysApply: true
+---
+
+# Git Auto-Push Rule
+
+After completing any code changes, automatically commit and push to GitHub.
+
+## Workflow
+
+1. **After each fix or feature**: Run `git status` to see all modified files
+2. **Commit with meaningful message**: Use clear, concise commit messages describing the change
+3. **Push immediately**: Push to remote after commit
+
+## Commands
+
+```bash
+# Stage all changes
+git add -A
+
+# Commit with message
+git commit -m "description of changes"
+
+# Push to remote
+git push
+```
+
+## Guidelines
+
+- Commit messages should be in English
+- Focus on "what" and "why", not "how"
+- Small, focused commits are better than large ones
+- If multiple unrelated changes exist, commit them separately
