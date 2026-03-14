@@ -38,16 +38,8 @@ export default function EquiDashboard() {
   // Security check: ensure user has completed onboarding
   useEffect(() => {
     const checkAuthAndOnboarding = async () => {
-      // #region agent log - debug dashboard hang
-      fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'530277'},body:JSON.stringify({sessionId:'530277',location:'dashboard/page.tsx:checkAuthAndOnboarding',message:'Starting auth check',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      
       // Step 1: Check if user is logged in
       const { user, error: userError } = await getUser();
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'530277'},body:JSON.stringify({sessionId:'530277',location:'dashboard/page.tsx:checkAuthAndOnboarding',message:'getUser result',data:{user:!!user,error:userError},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       
       if (userError) {
         console.error("User error:", userError);
@@ -61,10 +53,6 @@ export default function EquiDashboard() {
       // Step 2: Check if onboarding is completed
       const { profile, error: profileError } = await getProfile(user.id);
       
-      // #region agent log
-      fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'530277'},body:JSON.stringify({sessionId:'530277',location:'dashboard/page.tsx:checkAuthAndOnboarding',message:'getProfile result',data:{userId:user.id,hasProfile:!!profile,onboardingCompleted:profile?.onboarding_completed,error:profileError},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      
       if (profileError) {
         console.error("Profile error:", profileError);
       }
@@ -75,10 +63,6 @@ export default function EquiDashboard() {
         router.push("/equi/onboarding");
         return;
       }
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'530277'},body:JSON.stringify({sessionId:'530277',location:'dashboard/page.tsx:checkAuthAndOnboarding',message:'Auth check passed',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
     };
     
     checkAuthAndOnboarding();
