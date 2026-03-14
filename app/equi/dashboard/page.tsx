@@ -35,116 +35,90 @@ export default function EquiDashboard() {
     router.push("/equi/login");
   };
 
-  // Security check: ensure user has completed onboarding
+  // Security check + load user data: combined into one effect
   useEffect(() => {
-    const checkAuthAndOnboarding = async () => {
-      console.log('[DEBUG] Dashboard: Starting auth check');
+    const checkAuthAndLoadData = async () => {
+      console.log('[DEBUG] Dashboard: Starting auth check + data load');
       
-      // Step 1: Check if user is logged in
-      console.log('[DEBUG] Dashboard: Calling getUser()');
-      const { user, error: userError } = await getUser();
-      console.log('[DEBUG] Dashboard: getUser returned', { user: !!user, error: userError });
-      
-      if (userError) {
-        console.error("User error:", userError);
-        // If timeout, try to get session directly
-        if (userError.includes('Timeout')) {
-          console.log('[DEBUG] Dashboard: getUser timeout, trying getSession...');
-          const { session } = await getSession();
-          console.log('[DEBUG] Dashboard: getSession result:', { hasSession: !!session });
-          
-          if (session?.user) {
-            console.log('[DEBUG] Dashboard: Found user from session:', session.user.id);
-            // Continue with session user
-            const { profile, error: profileError } = await getProfile(session.user.id);
-            console.log('[DEBUG] Dashboard: Profile from session:', { hasProfile: !!profile, error: profileError });
-            
-            const completed = profile?.onboarding_completed === true;
-            console.log('[DEBUG] Dashboard: Completed status:', completed);
-            
-            if (!completed) {
-              console.log('[DEBUG] Dashboard: Not completed, redirecting to onboarding');
-              router.push("/equi/onboarding");
-              return;
-            }
-            
-            console.log('[DEBUG] Dashboard: Auth check passed (session path), showing content');
-            return;
-          }
-        }
-      }
-      
-      if (!user) {
-        console.log('[DEBUG] Dashboard: No user, redirecting to login');
-        router.push("/equi/login");
-        return;
-      }
-      
-      // Step 2: Check if onboarding is completed
-      console.log('[DEBUG] Dashboard: Calling getProfile() for user:', user.id);
-      const { profile, error: profileError } = await getProfile(user.id);
-      console.log('[DEBUG] Dashboard: getProfile returned', { hasProfile: !!profile, error: profileError });
-      
-      if (profileError) {
-        console.error("Profile error:", profileError);
-      }
-      
-      const completed = profile?.onboarding_completed === true;
-      console.log('[DEBUG] Dashboard: onboarding_completed =', completed);
-      
-      if (!completed) {
-        console.log('[DEBUG] Dashboard: Not completed, redirecting to onboarding');
-        router.push("/equi/onboarding");
-        return;
-      }
-      
-      console.log('[DEBUG] Dashboard: Auth check passed, showing content');
-    };
-    
-    checkAuthAndOnboarding();
-  }, [router]);
-
-  // Load user data on mount
-  useEffect(() => {
-    const loadUserData = async () => {
-      // Get current auth user
-      const { user } = await getUser();
-      
-      if (user && supabase) {
-        // Load from Supabase profile using auth user ID
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("user_data")
-          .eq("id", user.id)
-          .single();
-        
-        if (data?.user_data) {
-          setUserData(data.user_data);
-          localStorage.setItem("EQUI_USER_DATA", JSON.stringify(data.user_data));
-          console.log("Loaded user data from Supabase profile");
-          setIsLoading(false);
-          return;
-        }
-      }
-
-      // Fallback: Try localStorage
+      // Step 1: Try to get session from localStorage first (instant)
+      let sessionUser = null;
       const savedUserData = localStorage.getItem("EQUI_USER_DATA");
+      
       if (savedUserData) {
         try {
           const parsed = JSON.parse(savedUserData);
           setUserData(parsed);
-          console.log("Loaded user data from localStorage");
+          console.log('[DEBUG] Dashboard: Loaded user data from localStorage');
         } catch (e) {
           console.error("Error parsing saved user data:", e);
         }
       }
-
+      
+      // Step 2: Try to get session (fast path with short timeout)
+      console.log('[DEBUG] Dashboard: Trying getSession (5s timeout)...');
+      try {
+        const sessionPromise = getSession();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Session timeout')), 5000)
+        );
+        
+        const { session, error } = await Promise.race([sessionPromise, timeoutPromise]) as any;
+        console.log('[DEBUG] Dashboard: getSession result:', { hasSession: !!session, error });
+        
+        if (session?.user) {
+          sessionUser = session.user;
+        }
+      } catch (e: any) {
+        console.log('[DEBUG] Dashboard: getSession failed:', e?.message);
+        
+        // If we have localStorage data, use it - user is likely logged in
+        if (savedUserData) {
+          console.log('[DEBUG] Dashboard: Using localStorage data, assuming logged in');
+          setIsLoading(false);
+          return;
+        }
+      }
+      
+      // If no session and no localStorage, redirect to login
+      if (!sessionUser && !savedUserData) {
+        console.log('[DEBUG] Dashboard: No session, redirecting to login');
+        router.push("/equi/login");
+        return;
+      }
+      
+      // Step 3: If we have session user, check profile
+      if (sessionUser) {
+        console.log('[DEBUG] Dashboard: Have session user, checking profile:', sessionUser.id);
+        
+        // Try to get profile with timeout
+        try {
+          const profilePromise = getProfile(sessionUser.id);
+          const profileTimeout = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Profile timeout')), 10000)
+          );
+          
+          const { profile, error } = await Promise.race([profilePromise, profileTimeout]) as any;
+          console.log('[DEBUG] Dashboard: getProfile result:', { hasProfile: !!profile, error });
+          
+          if (profile?.onboarding_completed !== true) {
+            console.log('[DEBUG] Dashboard: Onboarding not completed, redirecting');
+            router.push("/equi/onboarding");
+            return;
+          }
+        } catch (profileErr: any) {
+          console.log('[DEBUG] Dashboard: Profile check failed:', profileErr?.message);
+          // If we have localStorage and session, assume profile is OK
+        }
+      }
+      
+      console.log('[DEBUG] Dashboard: Auth check passed, showing content');
       setIsLoading(false);
     };
+    
+    checkAuthAndLoadData();
+  }, [router]);
 
-    loadUserData();
-
-    // Listen for auth changes
+  // Listen for auth changes
     const subscription = onAuthStateChange(async (event, session) => {
       if (event === "SIGNED_IN" && session) {
         // Reload user data when signed in
