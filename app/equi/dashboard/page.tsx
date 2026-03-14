@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { EquiUser } from "../types";
 import { supabase } from "../lib/supabase";
-import { getUser, onAuthStateChange, signOut, getProfile } from "../lib/auth";
+import { getUser, onAuthStateChange, signOut, getProfile, getSession } from "../lib/auth";
 import { useRouter } from "next/navigation";
 
 // ============================================================================
@@ -47,6 +47,31 @@ export default function EquiDashboard() {
       
       if (userError) {
         console.error("User error:", userError);
+        // If timeout, try to get session directly
+        if (userError.includes('Timeout')) {
+          console.log('[DEBUG] Dashboard: getUser timeout, trying getSession...');
+          const { session } = await getSession();
+          console.log('[DEBUG] Dashboard: getSession result:', { hasSession: !!session });
+          
+          if (session?.user) {
+            console.log('[DEBUG] Dashboard: Found user from session:', session.user.id);
+            // Continue with session user
+            const { profile, error: profileError } = await getProfile(session.user.id);
+            console.log('[DEBUG] Dashboard: Profile from session:', { hasProfile: !!profile, error: profileError });
+            
+            const completed = profile?.onboarding_completed === true;
+            console.log('[DEBUG] Dashboard: Completed status:', completed);
+            
+            if (!completed) {
+              console.log('[DEBUG] Dashboard: Not completed, redirecting to onboarding');
+              router.push("/equi/onboarding");
+              return;
+            }
+            
+            console.log('[DEBUG] Dashboard: Auth check passed (session path), showing content');
+            return;
+          }
+        }
       }
       
       if (!user) {

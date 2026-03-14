@@ -28,10 +28,10 @@ export default function LoginPage() {
     
     const checkSession = async () => {
       try {
-        // Add timeout to prevent hanging
+        // Add timeout to prevent hanging - increased to 30s
         const sessionPromise = getSession();
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error("Session check timeout")), 5000)
+          setTimeout(() => reject(new Error("Session check timeout")), 30000)
         );
         
         const { session } = await Promise.race([sessionPromise, timeoutPromise]) as any;
