@@ -115,6 +115,7 @@ export async function getSession() {
 
 /**
  * Get current user
+ * Optimized: try getSession first (fast), then getUser (slower validation)
  */
 export async function getUser() {
   console.log('[DEBUG] getUser called');
@@ -126,16 +127,38 @@ export async function getUser() {
   }
 
   try {
-    console.log('[DEBUG] getUser: calling supabase.auth.getUser()');
+    // Step 1: Try getSession first (fast, uses local storage)
+    console.log('[DEBUG] getUser: trying getSession first (fast path)');
     
-    // Add timeout wrapper - increased to 30 seconds for slow connections
-    const timeoutPromise = new Promise<never>((_, reject) => 
+    const sessionTimeoutPromise = new Promise<never>((_, reject) => 
+      setTimeout(() => reject(new Error('Session timeout')), 5000)
+    );
+    
+    const sessionPromise = supabase.auth.getSession();
+    
+    let sessionResult: any;
+    try {
+      sessionResult = await Promise.race([sessionPromise, sessionTimeoutPromise]);
+    } catch (sessionErr: any) {
+      console.log('[DEBUG] getUser: getSession failed, trying getUser:', sessionErr?.message);
+      // Fall through to getUser
+    }
+    
+    if (sessionResult?.data?.session) {
+      console.log('[DEBUG] getUser: got session from fast path');
+      return { user: sessionResult.data.session.user, error: null };
+    }
+    
+    // Step 2: Fall back to getUser (slower but validates with API)
+    console.log('[DEBUG] getUser: falling back to getUser (slower validation)');
+    
+    const userTimeoutPromise = new Promise<never>((_, reject) => 
       setTimeout(() => reject(new Error('Timeout fetching user')), 30000)
     );
     
     const userPromise = supabase.auth.getUser();
     
-    const result = await Promise.race([userPromise, timeoutPromise]) as any;
+    const result = await Promise.race([userPromise, userTimeoutPromise]) as any;
     const { data: { user }, error } = result;
     
     console.log('[DEBUG] getUser result:', { hasUser: !!user, error });
