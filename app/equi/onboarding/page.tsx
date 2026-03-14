@@ -93,61 +93,43 @@ export default function EquiOnboarding() {
   // Auth check: redirect to dashboard if onboarding is already completed
   useEffect(() => {
     const checkOnboardingStatus = async () => {
-      console.log("[ONBOARDING] ===== Starting onboarding status check =====");
-      
       // Step 1: Get user
-      console.log("[ONBOARDING] Step 1: Getting user...");
       const { user, error: userError } = await getUser();
       
       if (userError) {
-        console.log("[ONBOARDING] User error:", userError);
+        console.error("User error:", userError);
       }
       
-      console.log("[ONBOARDING] User found:", !!user);
-      
       if (!user) {
-        console.log("[ONBOARDING] No user, staying on onboarding (login required)");
         setIsLoading(false);
         return;
       }
       
-      console.log("[ONBOARDING] User ID:", user.id);
-      
       // Step 2: Get profile directly from DB (authoritative source)
-      console.log("[ONBOARDING] Step 2: Getting profile from DB...");
       const { profile, error: profileError } = await getProfile(user.id);
       
       if (profileError) {
-        console.log("[ONBOARDING] Profile error:", profileError);
+        console.error("Profile error:", profileError);
       }
-      
-      console.log("[ONBOARDING] Profile data:", profile ? {
-        id: profile.id,
-        onboarding_completed: profile.onboarding_completed,
-        hasUserData: !!profile.user_data
-      } : null);
       
       // Step 3: Check completion status
       const completed = profile?.onboarding_completed === true;
-      console.log("[ONBOARDING] Onboarding status from DB:", completed);
       
       if (completed) {
-        console.log("[ONBOARDING] ===== Already completed, redirecting to /equi/dashboard =====");
         router.push("/equi/dashboard");
         return;
       }
       
-      console.log("[ONBOARDING] Not completed, showing onboarding");
       setIsLoading(false);
     };
     
     checkOnboardingStatus();
   }, [router]);
 
-  // Global error handler for debugging
+  // Global error handler
   useEffect(() => {
     const handleError = (event: ErrorEvent) => {
-      console.error('[DEBUG] Uncaught error:', event.message, 'at', event.filename, 'line', event.lineno);
+      console.error('Uncaught error:', event.message, 'at', event.filename, 'line', event.lineno);
     };
     window.addEventListener('error', handleError);
     return () => window.removeEventListener('error', handleError);
@@ -181,17 +163,18 @@ export default function EquiOnboarding() {
       if (email && supabase) {
         const { data, error } = await supabase
           .from("profiles")
-          .select("user_data")
+          .select("user_data, onboarding_completed")
           .eq("email", email)
           .single();
         
         if (error) {
           console.log("No existing profile in Supabase or error:", error.message);
-        } else if (data?.user_data) {
+        } else if (data?.onboarding_completed === true && data?.user_data && Object.keys(data.user_data).length > 0) {
+          // Only restore and show Summary when user has actually completed onboarding
           console.log("Loaded user data from Supabase:", data.user_data);
           
-          // Restore formData from user_data
           const userData = data.user_data;
+          
           const restoredFormData = {
             name: userData?.understanding?.name || "",
             occupation: userData?.understanding?.occupation || "",
@@ -234,13 +217,8 @@ export default function EquiOnboarding() {
           };
           
           setFormData(restoredFormData);
-          
-          // Also restore the full user data
-          if (userData) {
-            setSubmittedUser(userData);
-            setIsSubmitted(true);
-          }
-          
+          setSubmittedUser(userData);
+          setIsSubmitted(true);
           console.log("Form data restored from Supabase");
         }
       }
@@ -254,18 +232,6 @@ export default function EquiOnboarding() {
     const procrastinationIndex = mapProcrastinationToIndex(formData.procrastinationAnswer);
     const pressureSensitivity = mapPressureToIndex(formData.pressureAnswer);
     
-    // #region agent log
-    const fixedActivitiesDebug = formData.fixedActivities.map(fa => ({
-      label: fa.label,
-      slots: fa.slots?.map(s => ({ day: s?.day, startHour: s?.startHour, endHour: s?.endHour }))
-    }));
-    console.log('[DEBUG] buildEquiUser - formData state at submit:', {
-      focusPeaks: formData.focusPeaks,
-      energyDips: formData.energyDips,
-      fixedActivities: fixedActivitiesDebug
-    });
-    // #endregion
-
     const focusPeaksFormatted = formData.focusPeaks.flatMap((peak) =>
       (peak?.days || []).map((day) => ({
         weekday: day,
@@ -422,16 +388,8 @@ export default function EquiOnboarding() {
             .from("profiles")
             .upsert(profileUpdate, { onConflict: "id" });
 
-          console.log("[ONBOARDING] Profile upsert attempt:", {
-            usedAdmin: !!supabaseAdmin,
-            userId: user.id,
-            error: upsertError?.message || "none"
-          });
-          
           if (upsertError) {
             console.error("Failed to upsert profile:", upsertError);
-          } else {
-            console.log("Profile upserted with onboarding_completed=true");
           }
         } else {
           // Fallback: upsert by email (for non-auth users)
