@@ -3,8 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { EquiUser } from "../types";
 import { supabase } from "../lib/supabase";
-import { getUser, onAuthStateChange, signOut, getProfile } from "../lib/auth";
-import { useRouter } from "next/navigation";
+import { onAuthStateChange, signOut } from "../lib/auth";
 
 // ============================================================================
 // TYPES
@@ -24,7 +23,6 @@ interface Message {
 function DashboardSkeleton() {
   return (
     <div className="min-h-screen bg-[#fff] text-[#111] font-sans">
-      {/* Header Skeleton */}
       <header className="border-b border-[#eee] px-6 py-4 animate-pulse">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div>
@@ -40,9 +38,7 @@ function DashboardSkeleton() {
         </div>
       </header>
 
-      {/* Main Grid Skeleton */}
       <div className="max-w-7xl mx-auto grid grid-cols-12 min-h-[calc(100vh-80px)]">
-        {/* SECTION A: Profile Skeleton */}
         <section className="col-span-3 border-r border-[#eee] p-6">
           <div className="space-y-8 animate-pulse">
             <div>
@@ -52,17 +48,8 @@ function DashboardSkeleton() {
                 <div className="h-4 w-3/4 bg-[#eee] rounded"></div>
               </div>
             </div>
-            <div>
-              <div className="h-3 w-24 bg-[#eee] rounded mb-4"></div>
-              <div className="space-y-3">
-                <div className="h-4 w-full bg-[#eee] rounded"></div>
-                <div className="h-4 w-2/3 bg-[#eee] rounded"></div>
-              </div>
-            </div>
           </div>
         </section>
-
-        {/* SECTION B: Chat Skeleton */}
         <section className="col-span-6 flex flex-col border-r border-[#eee]">
           <div className="px-6 py-4 border-b border-[#eee]">
             <div className="h-3 w-24 bg-[#eee] rounded animate-pulse"></div>
@@ -70,25 +57,42 @@ function DashboardSkeleton() {
           <div className="flex-1 p-6 space-y-4">
             <div className="h-16 w-3/4 bg-[#eee] rounded"></div>
             <div className="h-16 w-1/2 bg-[#eee] rounded ml-auto"></div>
-            <div className="h-20 w-2/3 bg-[#eee] rounded"></div>
           </div>
           <div className="px-6 py-4 border-t border-[#eee]">
             <div className="h-10 w-full bg-[#eee] rounded"></div>
           </div>
         </section>
-
-        {/* SECTION C: Stats Skeleton */}
         <section className="col-span-3 p-6">
           <div className="space-y-8 animate-pulse">
             <div>
               <div className="h-3 w-12 bg-[#eee] rounded mb-4"></div>
               <div className="space-y-3">
                 <div className="h-20 bg-[#eee] rounded"></div>
-                <div className="h-20 bg-[#eee] rounded"></div>
               </div>
             </div>
           </div>
         </section>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// ERROR COMPONENT
+// ============================================================================
+
+function ErrorDisplay({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="min-h-screen bg-[#fff] flex items-center justify-center">
+      <div className="text-center space-y-4 max-w-md p-6">
+        <div className="text-lg text-red-600 font-medium">Connection Error</div>
+        <div className="text-sm text-[#666]">{message}</div>
+        <button
+          onClick={onRetry}
+          className="px-6 py-2 text-sm border border-[#111] hover:bg-[#111] hover:text-[#fff] transition-colors"
+        >
+          Retry
+        </button>
       </div>
     </div>
   );
@@ -101,180 +105,137 @@ function DashboardSkeleton() {
 export default function EquiDashboard() {
   const [userData, setUserData] = useState<EquiUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [authStatus, setAuthStatus] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
+  const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
-  const authCheckedRef = useRef(false);
+  const isMountedRef = useRef(true);
 
   const handleLogout = async () => {
     await signOut();
-    router.push("/equi/login");
+    window.location.href = "/equi/login";
   };
 
   // ============================================================================
-  // PARALLEL AUTH + PROFILE FETCH
-  // Uses Promise.all for parallel requests, Supabase is single source of truth
+  // CLEAN FETCH: Pure Supabase calls without localStorage hacks
   // ============================================================================
-  useEffect(() => {
-    const checkAuth = async () => {
-      if (authCheckedRef.current) return;
-      authCheckedRef.current = true;
+  const initializeDashboard = async (retryCount = 0) => {
+    const MAX_RETRIES = 2;
+    
+    console.log('[DEBUG] Dashboard: Starting clean fetch, attempt', retryCount + 1);
 
-      console.log('[DEBUG] Dashboard: Starting parallel auth check');
-
-      // Create a master timeout - don't wait forever
-      const TIMEOUT_MS = 8000; // 8 seconds max
+    try {
+      // 1. Lightweight auth check using getUser (not getSession - avoids polling deadlock)
+      if (!supabase) {
+        throw new Error("Supabase client not initialized");
+      }
       
-      try {
-        // PARALLEL REQUEST: Get user and profile simultaneously with timeout
-        const authPromise = Promise.all([
-          getUser().catch(err => ({ user: null, error: err.message })),
-          supabase?.auth.getSession().catch(err => ({ data: { session: null }, error: err.message })) || { data: { session: null }, error: 'supabase not initialized' }
-        ]);
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError) {
+        console.error('[DEBUG] Dashboard: Auth error:', authError);
+        throw new Error(`Authentication failed: ${authError.message}`);
+      }
 
-        const timeoutPromise = new Promise<null>((_, reject) => 
-          setTimeout(() => reject(new Error('Auth timeout')), TIMEOUT_MS)
-        );
+      if (!user) {
+        console.log('[DEBUG] Dashboard: No user, redirecting to login');
+        window.location.href = "/equi/login";
+        return;
+      }
 
-        let userResult: any;
-        let sessionResult: any;
-        
-        try {
-          [userResult, sessionResult] = await Promise.race([authPromise, timeoutPromise]) as any;
-        } catch (timeoutErr: any) {
-          console.log('[DEBUG] Dashboard: Auth timed out after', TIMEOUT_MS, 'ms');
-          // Timeout - check localStorage as last resort
-          const savedUserData = localStorage.getItem("EQUI_USER_DATA");
-          if (savedUserData) {
-            try {
-              const parsed = JSON.parse(savedUserData);
-              setUserData(parsed);
-              setAuthStatus("authenticated");
-              console.log('[DEBUG] Dashboard: Using localStorage fallback after timeout');
-              setIsLoading(false);
-              return;
-            } catch (e) {
-              console.error('[DEBUG] Dashboard: Failed to parse localStorage');
-            }
-          }
-          // No localStorage, redirect to login
-          router.push("/equi/login");
-          setIsLoading(false);
-          return;
+      console.log('[DEBUG] Dashboard: User authenticated:', user.id);
+
+      // 2. Precise profile fetch using maybeSingle
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        console.error('[DEBUG] Dashboard: Profile error:', profileError);
+        throw new Error(`Failed to load profile: ${profileError.message}`);
+      }
+
+      console.log('[DEBUG] Dashboard: Profile fetched:', { 
+        hasProfile: !!profile, 
+        onboardingCompleted: profile?.onboarding_completed 
+      });
+
+      // 3. Check onboarding status
+      if (!profile || !profile.onboarding_completed) {
+        console.log('[DEBUG] Dashboard: Onboarding not completed, redirecting');
+        window.location.href = "/equi/onboarding";
+        return;
+      }
+
+      // 4. Success - set user data from cloud
+      if (isMountedRef.current) {
+        setUserData(profile.user_data as EquiUser);
+        setIsLoading(false);
+        console.log('[DEBUG] Dashboard: Successfully loaded from Supabase');
+      }
+
+    } catch (err: any) {
+      console.error('[DEBUG] Dashboard: FATAL ERROR:', err?.message);
+      
+      // Retry logic
+      if (retryCount < MAX_RETRIES) {
+        console.log('[DEBUG] Dashboard: Retrying...', retryCount + 1, '/', MAX_RETRIES);
+        await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+        if (isMountedRef.current) {
+          initializeDashboard(retryCount + 1);
         }
-
-        console.log('[DEBUG] Dashboard: Parallel results:', {
-          getUser: !!userResult.user,
-          getSession: !!sessionResult.data?.session
-        });
-
-        // Use getUser result as authoritative (validated with Supabase)
-        const user = userResult.user || sessionResult.data?.session?.user;
-
-        if (!user) {
-          console.log('[DEBUG] Dashboard: No user found, redirecting to login');
-          setAuthStatus("unauthenticated");
-          router.push("/equi/login");
-          return;
-        }
-
-        console.log('[DEBUG] Dashboard: User authenticated:', user.id);
-
-        // Get profile from Supabase (single source of truth)
-        const { profile, error: profileError } = await getProfile(user.id);
-
-        if (profileError) {
-          console.error('[DEBUG] Dashboard: Profile error:', profileError);
-        }
-
-        // Check onboarding status
-        if (profile?.onboarding_completed !== true) {
-          console.log('[DEBUG] Dashboard: Onboarding not completed, redirecting');
-          router.push("/equi/onboarding");
-          return;
-        }
-
-        // Set user data from Supabase profile
-        if (profile?.user_data) {
-          setUserData(profile.user_data);
-        }
-
-        setAuthStatus("authenticated");
-        console.log('[DEBUG] Dashboard: Auth check passed');
-
-      } catch (err: any) {
-        console.error('[DEBUG] Dashboard: Auth check failed:', err?.message);
-        
-        // Last resort: try localStorage
-        const savedUserData = localStorage.getItem("EQUI_USER_DATA");
-        if (savedUserData) {
-          try {
-            const parsed = JSON.parse(savedUserData);
-            setUserData(parsed);
-            setAuthStatus("authenticated");
-            console.log('[DEBUG] Dashboard: Using localStorage fallback after error');
-            setIsLoading(false);
-            return;
-          } catch (e) {}
-        }
-        
-        setAuthStatus("unauthenticated");
-        router.push("/equi/login");
-      } finally {
+        return;
+      }
+      
+      // Show real error after all retries failed
+      if (isMountedRef.current) {
+        setError(err?.message || "Failed to connect to database");
         setIsLoading(false);
       }
+    }
+  };
+
+  // Mount effect
+  useEffect(() => {
+    initializeDashboard();
+
+    return () => {
+      isMountedRef.current = false;
     };
+  }, []);
 
-    checkAuth();
-  }, [router]);
-
-  // ============================================================================
-  // REAL-TIME AUTH STATE LISTENER
-  // Uses onAuthStateChange for instant login detection
-  // ============================================================================
+  // Real-time auth listener
   useEffect(() => {
     if (!supabase) return;
-    
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('[DEBUG] Dashboard: Auth state changed:', event);
 
       if (event === "SIGNED_IN" && session) {
-        console.log('[DEBUG] Dashboard: User signed in, loading profile...');
-        
-        // Immediately fetch profile on sign in
-        const { profile } = await getProfile(session.user.id);
-        if (profile?.user_data) {
-          setUserData(profile.user_data);
-          setAuthStatus("authenticated");
-        }
+        initializeDashboard();
       } else if (event === "SIGNED_OUT") {
-        console.log('[DEBUG] Dashboard: User signed out');
-        setAuthStatus("unauthenticated");
-        router.push("/equi/login");
+        window.location.href = "/equi/login";
       }
     });
 
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [router]);
+    return () => subscription.unsubscribe();
+  }, []);
 
-  // Scroll to bottom when new messages arrive
+  // Scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Auto-trigger opening message when user data loads
+  // Auto-trigger opening message
   useEffect(() => {
-    if (userData && messages.length === 0 && authStatus === "authenticated") {
+    if (userData && messages.length === 0) {
       generateOpeningMessage();
     }
-  }, [userData, authStatus]);
+  }, [userData]);
 
-  // Generate opening message
   const generateOpeningMessage = async () => {
     if (!userData) return;
 
@@ -312,7 +273,6 @@ export default function EquiDashboard() {
     }
   };
 
-  // Handle message submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputValue.trim() || isStreaming) return;
@@ -328,13 +288,11 @@ export default function EquiDashboard() {
     setInputValue("");
     setIsStreaming(true);
 
-    // Prepare conversation history
     const conversationHistory = messages.map((m) => ({
       role: m.role === "user" ? "user" : "model",
       content: m.content,
     }));
 
-    // Prepare user data for context
     const userContext = {
       mbti: userData?.understanding?.mbti,
       focusPeaks: userData?.understanding?.biologicalClock?.focusPeaks,
@@ -344,9 +302,7 @@ export default function EquiDashboard() {
     try {
       const response = await fetch("/api/synthesis", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: userMessage.content,
           conversationHistory,
@@ -354,11 +310,8 @@ export default function EquiDashboard() {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to get response");
-      }
+      if (!response.ok) throw new Error("Failed to get response");
 
-      // Handle streaming response
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       
@@ -378,7 +331,6 @@ export default function EquiDashboard() {
         const chunk = decoder.decode(value);
         assistantMessage.content += chunk;
         
-        // Update the last message
         setMessages((prev) => 
           prev.map((m, i) => i === prev.length - 1 ? { ...m, content: assistantMessage.content } : m)
         );
@@ -398,17 +350,24 @@ export default function EquiDashboard() {
   };
 
   // ============================================================================
-  // RENDER: Show skeleton while loading, then actual content
+  // RENDER
   // ============================================================================
   if (isLoading) {
     return <DashboardSkeleton />;
   }
 
-  if (authStatus === "unauthenticated" || !userData) {
+  if (error) {
+    return <ErrorDisplay message={error} onRetry={() => { setError(null); setIsLoading(true); initializeDashboard(); }} />;
+  }
+
+  if (!userData) {
     return (
       <div className="min-h-screen bg-[#fff] flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="text-lg">Redirecting...</div>
+        <div className="text-center">
+          <div className="text-lg">No user data found</div>
+          <a href="/equi/onboarding" className="text-xs underline text-[#666] mt-2 block">
+            Go to Onboarding
+          </a>
         </div>
       </div>
     );
@@ -419,7 +378,6 @@ export default function EquiDashboard() {
 
   return (
     <div className="min-h-screen bg-[#fff] text-[#111] font-sans">
-      {/* Header */}
       <header className="border-b border-[#eee] px-6 py-4">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div>
@@ -431,20 +389,14 @@ export default function EquiDashboard() {
               <div className="text-sm font-medium">{name}</div>
               <div className="text-xs text-[#666]">{occupation}</div>
             </div>
-            <button
-              onClick={handleLogout}
-              className="text-xs text-[#999] hover:text-[#111] transition-colors underline"
-            >
+            <button onClick={handleLogout} className="text-xs text-[#999] hover:text-[#111] transition-colors underline">
               Logout
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main Grid: Section A | Section B | Section C */}
       <div className="max-w-7xl mx-auto grid grid-cols-12 min-h-[calc(100vh-80px)]">
-        
-        {/* SECTION A: User Profile Card */}
         <section className="col-span-3 border-r border-[#eee] p-6">
           <div className="space-y-8">
             <div>
@@ -505,22 +457,14 @@ export default function EquiDashboard() {
           </div>
         </section>
 
-        {/* SECTION B: AI Chat Interface */}
         <section className="col-span-6 flex flex-col border-r border-[#eee]">
-          {/* Chat Header */}
           <div className="px-6 py-4 border-b border-[#eee]">
             <h2 className="text-xs uppercase tracking-widest text-[#666]">Equi Assistant</h2>
           </div>
 
-          {/* Messages Area */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
             {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`${
-                  message.role === "user" ? "ml-12" : "mr-12"
-                }`}
-              >
+              <div key={message.id} className={message.role === "user" ? "ml-12" : "mr-12"}>
                 {message.role === "user" ? (
                   <div className="text-sm">{message.content}</div>
                 ) : (
@@ -536,7 +480,6 @@ export default function EquiDashboard() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input Area */}
           <div className="px-6 py-4 border-t border-[#eee]">
             <form onSubmit={handleSubmit} className="relative">
               <input
@@ -558,7 +501,6 @@ export default function EquiDashboard() {
           </div>
         </section>
 
-        {/* SECTION C: Quick Stats / Actions */}
         <section className="col-span-3 p-6">
           <div className="space-y-8">
             <div>
@@ -568,8 +510,7 @@ export default function EquiDashboard() {
                   <div className="text-xs text-[#666] mb-1">Fixed Slots</div>
                   <div className="text-2xl font-light">
                     {(userData.lifeStructure?.fixedActivities || []).reduce(
-                      (count, activity) => count + (activity.slots?.length || 0),
-                      0
+                      (count, activity) => count + (activity.slots?.length || 0), 0
                     )}
                   </div>
                 </div>
@@ -597,16 +538,6 @@ export default function EquiDashboard() {
                 <button className="w-full text-left px-4 py-3 text-sm border border-[#eee] hover:border-[#111] transition-colors">
                   Edit Profile
                 </button>
-                <button 
-                  onClick={() => {
-                    localStorage.removeItem("EQUI_USER_DATA");
-                    localStorage.removeItem("EQUI_FORM_DATA");
-                    window.location.href = "/equi/onboarding";
-                  }}
-                  className="w-full text-left px-4 py-3 text-sm border border-[#eee] hover:border-[#111] transition-colors text-[#666]"
-                >
-                  Reset Data
-                </button>
               </div>
             </div>
           </div>
@@ -615,10 +546,6 @@ export default function EquiDashboard() {
     </div>
   );
 }
-
-// ============================================================================
-// UTILITIES
-// ============================================================================
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 11);
