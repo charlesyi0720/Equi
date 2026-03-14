@@ -132,7 +132,7 @@ export default function EquiDashboard() {
           // Promise 1: getUser (validates with Supabase)
           getUser().catch(err => ({ user: null, error: err.message })),
           // Promise 2: getSession (local cache, faster but may be stale)
-          supabase.auth.getSession().catch(err => ({ data: { session: null }, error: err.message }))
+          supabase?.auth.getSession().catch(err => ({ data: { session: null }, error: err.message })) || { data: { session: null }, error: 'supabase not initialized' }
         ]);
 
         console.log('[DEBUG] Dashboard: Parallel results:', {
@@ -191,6 +191,8 @@ export default function EquiDashboard() {
   // Uses onAuthStateChange for instant login detection
   // ============================================================================
   useEffect(() => {
+    if (!supabase) return;
+    
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('[DEBUG] Dashboard: Auth state changed:', event);
 
