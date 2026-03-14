@@ -38,44 +38,47 @@ export default function EquiDashboard() {
   // Security check: ensure user has completed onboarding
   useEffect(() => {
     const checkAuthAndOnboarding = async () => {
-      console.log("[DASHBOARD] ===== Starting auth and onboarding check =====");
+      // #region agent log - debug dashboard hang
+      fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'530277'},body:JSON.stringify({sessionId:'530277',location:'dashboard/page.tsx:checkAuthAndOnboarding',message:'Starting auth check',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       
       // Step 1: Check if user is logged in
-      console.log("[DASHBOARD] Step 1: Checking user...");
       const { user, error: userError } = await getUser();
       
+      // #region agent log
+      fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'530277'},body:JSON.stringify({sessionId:'530277',location:'dashboard/page.tsx:checkAuthAndOnboarding',message:'getUser result',data:{user:!!user,error:userError},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      
       if (userError) {
-        console.log("[DASHBOARD] User error:", userError);
+        console.error("User error:", userError);
       }
       
-      console.log("[DASHBOARD] User logged in:", !!user);
-      
       if (!user) {
-        console.log("[DASHBOARD] Not logged in, redirecting to /equi/login");
         router.push("/equi/login");
         return;
       }
       
-      console.log("[DASHBOARD] User ID:", user.id);
-      
       // Step 2: Check if onboarding is completed
-      console.log("[DASHBOARD] Step 2: Checking onboarding status from DB...");
       const { profile, error: profileError } = await getProfile(user.id);
       
+      // #region agent log
+      fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'530277'},body:JSON.stringify({sessionId:'530277',location:'dashboard/page.tsx:checkAuthAndOnboarding',message:'getProfile result',data:{userId:user.id,hasProfile:!!profile,onboardingCompleted:profile?.onboarding_completed,error:profileError},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      
       if (profileError) {
-        console.log("[DASHBOARD] Profile error:", profileError);
+        console.error("Profile error:", profileError);
       }
       
       const completed = profile?.onboarding_completed === true;
-      console.log("[DASHBOARD] Onboarding completed:", completed);
       
       if (!completed) {
-        console.log("[DASHBOARD] Onboarding not completed, redirecting to /equi/onboarding");
         router.push("/equi/onboarding");
         return;
       }
       
-      console.log("[DASHBOARD] ===== Auth check passed, loading data =====");
+      // #region agent log
+      fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'530277'},body:JSON.stringify({sessionId:'530277',location:'dashboard/page.tsx:checkAuthAndOnboarding',message:'Auth check passed',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
     };
     
     checkAuthAndOnboarding();
