@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, FormEvent } from "react";
 import { EquiUser } from "../types";
 import { supabase } from "../lib/supabase";
 import { onAuthStateChange, signOut } from "../lib/auth";
@@ -79,7 +79,22 @@ function ErrorDisplay({ message, onRetry }: { message: string; onRetry: () => vo
 // DASHBOARD COMPONENT
 // ============================================================================
 
+// #region debug logging
+const DEBUG_ENDPOINT = 'http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228';
+const log = (msg: string, data: any) => {
+  fetch(DEBUG_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '499517' },
+    body: JSON.stringify({ sessionId: '499517', location: 'dashboard/page.tsx', message: msg, data, timestamp: Date.now() })
+  }).catch(() => {});
+};
+// #endregion
+
 export default function EquiDashboard() {
+  // #region debug log - component mount
+  log('EquiDashboard mounted', { timestamp: Date.now() });
+  // #endregion
+
   const [userData, setUserData] = useState<EquiUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -113,6 +128,9 @@ export default function EquiDashboard() {
       }
 
       if (!user) {
+        // #region debug log - redirect to login
+        log('No user found, redirecting to /equi/login', { timestamp: Date.now() });
+        // #endregion
         window.location.href = "/equi/login";
         return;
       }
@@ -233,7 +251,7 @@ export default function EquiDashboard() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!inputValue.trim() || isStreaming) return;
 
@@ -317,6 +335,9 @@ export default function EquiDashboard() {
   }
 
   if (error) {
+    // #region debug log - error display
+    log('Showing error display', { error, timestamp: Date.now() });
+    // #endregion
     return <ErrorDisplay message={error} onRetry={() => { setError(null); setIsLoading(true); initializeDashboard(); }} />;
   }
 
