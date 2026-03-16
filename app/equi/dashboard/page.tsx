@@ -585,7 +585,7 @@ function DashboardContent() {
             </div>
 
             <div className="px-5 py-4">
-              <div className="h-[420px] overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+              <div className="overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700" style={{ height: "calc(100vh - 350px)" }}>
                 <div className="space-y-3">
                   {messages.map((m) => (
                     <div
@@ -682,7 +682,7 @@ function DashboardContent() {
               </div>
             </div>
 
-            <div ref={calendarScrollRef} className="overflow-y-auto" style={{ height: "calc(100vh - 280px)" }}>
+            <div ref={calendarScrollRef} className="overflow-y-auto" style={{ height: "calc(100vh - 180px)" }}>
               <div className="min-w-[900px]">
                 <div
                   className="grid"
@@ -709,7 +709,10 @@ function DashboardContent() {
                   {hours.map((h) => (
                     <React.Fragment key={h}>
                       {/* Time label */}
-                      <div className="flex items-start justify-end border-b border-r border-slate-200 bg-white pr-2 pt-2 text-[11px] text-slate-500 sticky left-0 z-10 bg-white">
+                      <div 
+                        className="flex items-start justify-end border-b border-r border-slate-200 bg-white pr-2 pt-2 text-[11px] text-slate-500 sticky left-0 z-10 bg-white"
+                        style={{ gridColumn: 1, gridRow: gridRowForHour(h) }}
+                      >
                         {hourLabel(h)}
                       </div>
                       {days.map((_, dayIdx) => {
@@ -722,6 +725,8 @@ function DashboardContent() {
                               key={`${dayIdx}-${h}`}
                               className={`${baseClass} bg-white`}
                               style={{
+                                gridColumn: gridColForDayIdx(dayIdx),
+                                gridRow: gridRowForHour(h),
                                 backgroundImage:
                                   "repeating-linear-gradient(135deg, rgba(148,163,184,0.22) 0px, rgba(148,163,184,0.22) 4px, rgba(255,255,255,0) 4px, rgba(255,255,255,0) 12px)",
                               }}
@@ -732,6 +737,7 @@ function DashboardContent() {
                           <div
                             key={`${dayIdx}-${h}`}
                             className={`${baseClass} ${isPeak ? "bg-blue-50/40" : "bg-white"}`}
+                            style={{ gridColumn: gridColForDayIdx(dayIdx), gridRow: gridRowForHour(h) }}
                           />
                         );
                       })}
