@@ -212,6 +212,25 @@ export default function EquiDashboard() {
     }
   }, [userData]);
 
+  // Fetch wrapper for debugging
+  const debugFetch = async (url: string, options?: RequestInit) => {
+    // #region debug log - fetch start
+    log('Fetch started', { url, method: options?.method || 'GET' });
+    // #endregion
+    try {
+      const response = await fetch(url, options);
+      // #region debug log - fetch complete
+      log('Fetch complete', { url, status: response.status });
+      // #endregion
+      return response;
+    } catch (err: any) {
+      // #region debug log - fetch error
+      log('Fetch error', { url, error: err?.message });
+      // #endregion
+      throw err;
+    }
+  };
+
   const generateOpeningMessage = async () => {
     if (!userData) return;
 
@@ -226,7 +245,7 @@ export default function EquiDashboard() {
         preferredAgentPersona,
       }));
 
-      const response = await fetch(`/api/synthesis?userData=${userDataParam}`);
+      const response = await debugFetch(`/api/synthesis?userData=${userDataParam}`);
       const data = await response.json();
       
       const openingMessage: Message = {
@@ -278,7 +297,7 @@ export default function EquiDashboard() {
     };
 
     try {
-      const response = await fetch("/api/synthesis", {
+      const response = await debugFetch("/api/synthesis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -475,7 +494,7 @@ export default function EquiDashboard() {
     };
 
     try {
-      const response = await fetch("/api/synthesis", {
+      const response = await debugFetch("/api/synthesis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
