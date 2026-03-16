@@ -415,10 +415,13 @@ export default function EquiDashboard() {
   const dipStart = 21;
 
   // Ref for auto-scrolling
-  const calendarScrollRef = React.useRef<HTMLDivElement>(null);
+  const calendarScrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to current time on mount
-  React.useEffect(() => {
+  // #region debug log
+  fetch('http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'499517'},body:JSON.stringify({sessionId:'499517',location:'dashboard/page.tsx:useEffect',message:'Calendar useEffect running',data:{currentTimeTop,hasRef:!!calendarScrollRef},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+  useEffect(() => {
     const targetScroll = Math.max(0, currentTimeTop - 150); // 150px above current time
     if (calendarScrollRef.current) {
       calendarScrollRef.current.scrollTop = targetScroll;
