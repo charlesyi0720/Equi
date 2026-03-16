@@ -224,7 +224,9 @@ function DashboardContent() {
 
   // Scroll to bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages]);
 
   // Auto-trigger opening message
@@ -409,19 +411,23 @@ function DashboardContent() {
     Sunday: "Sun",
   };
 
-  // Extract fixed activities from userData
+  // Extract fixed activities from userData (with defensive checks)
   const fixedActivities = userData?.lifeStructure?.fixedActivities || [];
-  for (const activity of fixedActivities) {
-    if (activity.activityType === "strictlyFixed" && activity.slots) {
+  for (const activity of (Array.isArray(fixedActivities) ? fixedActivities : [])) {
+    if (activity?.activityType === "strictlyFixed" && Array.isArray(activity?.slots)) {
       for (const slot of activity.slots) {
+        if (slot?.day == null || slot?.startHour == null || slot?.endHour == null) continue;
         const shortDay = weekdayToShort[slot.day] || slot.day;
         const dayIdx = days.indexOf(shortDay as typeof days[number]);
         if (dayIdx >= 0) {
+          const start = (slot.startHour ?? 0) + ((slot.startMinute ?? 0) / 60);
+          const end = (slot.endHour ?? 0) + ((slot.endMinute ?? 0) / 60);
+          if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
           userEvents.push({
-            title: activity.label,
+            title: activity.label || "Untitled",
             dayIdx,
-            start: slot.startHour + (slot.startMinute || 0) / 60,
-            end: slot.endHour + (slot.endMinute || 0) / 60,
+            start,
+            end,
             isFixed: true,
           });
         }
@@ -457,6 +463,7 @@ function DashboardContent() {
 
   // Auto-scroll to current time on mount
   useEffect(() => {
+    if (!Number.isFinite(currentTimeTop)) return;
     const targetScroll = Math.max(0, currentTimeTop - 150); // 150px above current time
     if (calendarScrollRef.current) {
       calendarScrollRef.current.scrollTop = targetScroll;
@@ -742,7 +749,17 @@ function DashboardContent() {
                   </div>
 
                   {/* Render real events */}
-                  {userEvents.map((event, idx) => (
+                  {(Array.isArray(userEvents) ? userEvents : []).map((event, idx) => {
+                    if (!event || !Number.isFinite(event.dayIdx) || !Number.isFinite(event.start) || !Number.isFinite(event.end)) {
+                      return null;
+                    }
+                    const colStart = gridColForDayIdx(event.dayIdx);
+                    const rowStart = gridRowForHour(Math.floor(event.start));
+                    const rowEnd = gridRowEndForHour(Math.ceil(event.end));
+                    if (!Number.isFinite(colStart) || !Number.isFinite(rowStart) || !Number.isFinite(rowEnd)) {
+                      return null;
+                    }
+                    return (
                     <div
                       key={idx}
                       className={`z-10 mx-1 my-1 rounded-lg px-3 py-2 text-xs text-slate-900 overflow-hidden ${
@@ -751,10 +768,10 @@ function DashboardContent() {
                           : "border border-dashed border-slate-400 bg-white"
                       }`}
                       style={{
-                        gridColumnStart: gridColForDayIdx(event.dayIdx),
-                        gridColumnEnd: gridColForDayIdx(event.dayIdx) + 1,
-                        gridRowStart: gridRowForHour(Math.floor(event.start)),
-                        gridRowEnd: gridRowEndForHour(Math.ceil(event.end)),
+                        gridColumnStart: colStart,
+                        gridColumnEnd: colStart + 1,
+                        gridRowStart: rowStart,
+                        gridRowEnd: rowEnd,
                       }}
                     >
                       <div className={`font-medium ${!event.isFixed ? "flex items-center gap-2" : ""}`}>
@@ -765,7 +782,8 @@ function DashboardContent() {
                         {hourLabel(Math.floor(event.start))}–{hourLabel(Math.ceil(event.end))}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
