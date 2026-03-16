@@ -120,11 +120,8 @@ export default function LoginPage() {
           setError(signInError);
         } else if (user) {
           // Get profile directly from DB
-          console.log('[LOGIN] Sign in successful, user:', user.id);
           const { profile } = await getProfile(user.id);
-          console.log('[LOGIN] Profile result:', { profile, onboarding_completed: profile?.onboarding_completed });
           const completed = profile?.onboarding_completed === true;
-          console.log('[LOGIN] Redirect decision:', completed ? 'dashboard' : 'onboarding');
           window.location.href = completed ? "/equi/dashboard" : "/equi/onboarding";
         }
       }

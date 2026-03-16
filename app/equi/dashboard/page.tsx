@@ -169,9 +169,7 @@ function DashboardContent() {
       }
 
       // 3. Check onboarding status
-      console.log('[DASHBOARD] Profile result:', { profile, onboarding_completed: profile?.onboarding_completed });
       if (!profile || !profile.onboarding_completed) {
-        console.log('[DASHBOARD] Redirecting to onboarding');
         window.location.href = "/equi/onboarding";
         return;
       }

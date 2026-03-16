@@ -184,15 +184,11 @@ function OnboardingContent() {
 
       // Step 3: Check completion status
       const completed = profile?.onboarding_completed === true;
-      console.log('[ONBOARDING] Completed status:', completed);
 
       if (completed) {
-        console.log('[ONBOARDING] Redirecting to dashboard (profile path)');
         window.location.href = "/equi/dashboard";
         return;
       }
-
-      console.log('[ONBOARDING] Showing onboarding form');
 
       setIsLoading(false);
       console.log('[ONBOARDING] Onboarding not completed, showing form');
