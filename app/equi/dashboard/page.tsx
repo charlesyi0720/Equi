@@ -336,36 +336,94 @@ export default function EquiDashboard() {
   const name = userData?.understanding?.name || "User";
 
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
-  const startHour = 8;
-  const endHour = 22;
+  const startHour = 0;
+  const endHour = 23;
   const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i);
+  const hourRowHeight = 64; // h-16 = 64px per hour
+  const headerHeight = 44;
 
-  const hourLabel = (h: number) => {
-    const hour12 = h % 12 === 0 ? 12 : h % 12;
-    const ampm = h < 12 ? "AM" : "PM";
-    return `${hour12} ${ampm}`;
+  // Get current time for the red line
+  const now = new Date();
+  const currentHour = now.getHours();
+  const currentMinute = now.getMinutes();
+  const currentTimeTop = headerHeight + (currentHour * hourRowHeight) + (currentMinute / 60) * hourRowHeight;
+
+  // Build real events from userData
+  const userEvents: Array<{
+    title: string;
+    dayIdx: number;
+    start: number;
+    end: number;
+    isFixed: boolean;
+  }> = [];
+
+  // Map full weekday names to short names
+  const weekdayToShort: Record<string, string> = {
+    Monday: "Mon",
+    Tuesday: "Tue",
+    Wednesday: "Wed",
+    Thursday: "Thu",
+    Friday: "Fri",
+    Saturday: "Sat",
+    Sunday: "Sun",
   };
 
-  const gridColForDayIdx = (dayIdx: number) => dayIdx + 2;
-  const gridRowForHour = (h: number) => (h - startHour) + 2;
+  // Extract fixed activities from userData
+  const fixedActivities = userData?.lifeStructure?.fixedActivities || [];
+  for (const activity of fixedActivities) {
+    if (activity.activityType === "strictlyFixed" && activity.slots) {
+      for (const slot of activity.slots) {
+        const shortDay = weekdayToShort[slot.day] || slot.day;
+        const dayIdx = days.indexOf(shortDay as typeof days[number]);
+        if (dayIdx >= 0) {
+          userEvents.push({
+            title: activity.label,
+            dayIdx,
+            start: slot.startHour + (slot.startMinute || 0) / 60,
+            end: slot.endHour + (slot.endMinute || 0) / 60,
+            isFixed: true,
+          });
+        }
+      }
+    }
+  }
+
+  // Add AI-suggested placeholder if no events exist
+  if (userEvents.length === 0) {
+    userEvents.push({
+      title: "Deep Work: Thesis",
+      dayIdx: 2, // Wed
+      start: 10,
+      end: 13,
+      isFixed: false,
+    });
+  }
+
+  const hourLabel = (h: number) => {
+    if (h === 0) return "12 AM";
+    if (h === 12) return "12 PM";
+    if (h < 12) return `${h} AM`;
+    return `${h - 12} PM`;
+  };
+
+  const gridColForDayIdx = (dayIdx: number) => dayIdx + 2; // +2 because col 1 is time labels, col 2+ are days
+  const gridRowForHour = (h: number) => h + 2; // +2 because row 1 is header, row 2 = hour 0
+  const gridRowEndForHour = (h: number) => h + 3; // end is exclusive
 
   const focusPeakStart = 10;
   const focusPeakEnd = 13;
   const dipStart = 21;
 
-  const fixedEvent = {
-    title: "Econometrics Lecture",
-    dayIdx: 1, // Tue
-    start: 10,
-    end: 12,
-  };
+  // Ref for auto-scrolling
+  const calendarScrollRef = React.useRef<HTMLDivElement>(null);
 
-  const aiEvent = {
-    title: "Deep Work: Thesis",
-    dayIdx: 2, // Wed
-    start: 10,
-    end: 13,
-  };
+  // Auto-scroll to current time on mount
+  React.useEffect(() => {
+    const targetScroll = Math.max(0, currentTimeTop - 150); // 150px above current time
+    if (calendarScrollRef.current) {
+      calendarScrollRef.current.scrollTop = targetScroll;
+    }
+  }, [currentTimeTop]);
 
   const submitQuickAction = async (text: string) => {
     if (!text.trim() || isStreaming) return;
@@ -402,7 +460,11 @@ export default function EquiDashboard() {
         }),
       });
 
-      if (!response.ok) throw new Error("Failed to get response");
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Chat API error:", response.status, errorText);
+        throw new Error(`API error ${response.status}: ${errorText}`);
+      }
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
@@ -427,12 +489,12 @@ export default function EquiDashboard() {
           prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantMessage.content } : m))
         );
       }
-    } catch (error) {
-      console.error("Error sending message:", error);
+    } catch (error: any) {
+      console.error("Error sending message:", error?.message || error);
       const errorMessage: Message = {
         id: generateId(),
         role: "assistant",
-        content: "Sorry — I hit a snag. Please try again.",
+        content: `Sorry — I hit a snag: ${error?.message || "Unknown error"}. Please try again.`,
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
@@ -544,11 +606,11 @@ export default function EquiDashboard() {
 
           {/* Right Panel: Energy-Aware Weekly Calendar */}
           <div className="rounded-xl border border-slate-200 bg-white">
-            <div className="border-b border-slate-200 px-5 py-4">
+            <div className="sticky top-0 z-10 border-b border-slate-200 bg-white px-5 py-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-sm font-medium text-slate-900">This Week</div>
-                  <div className="mt-1 text-xs text-slate-500">Mon–Sun · 8 AM–10 PM</div>
+                  <div className="mt-1 text-xs text-slate-500">Mon–Sun · 12 AM–11 PM</div>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-slate-500">
                   <div className="flex items-center gap-2">
@@ -565,39 +627,48 @@ export default function EquiDashboard() {
                     />
                     Energy dip
                   </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block h-3 w-3 rounded border border-red-400 border-dashed" />
+                    Now
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="px-5 py-4">
-              <div className="overflow-x-auto">
+            <div ref={calendarScrollRef} className="overflow-y-auto" style={{ height: "calc(100vh - 280px)" }}>
+              <div className="min-w-[900px]">
                 <div
-                  className="grid min-w-[900px] rounded-xl border border-slate-200"
+                  className="grid"
                   style={{
-                    gridTemplateColumns: "80px repeat(7, minmax(0, 1fr))",
-                    gridTemplateRows: `44px repeat(${hours.length}, 48px)`,
+                    gridTemplateColumns: "64px repeat(7, minmax(0, 1fr))",
+                    gridTemplateRows: `44px repeat(${hours.length}, ${hourRowHeight}px)`,
                   }}
                 >
-                  <div className="border-b border-slate-200 bg-slate-50" />
+                  {/* Header row corner */}
+                  <div className="border-b border-r border-slate-200 bg-slate-50 sticky top-0 z-10" />
 
-                  {days.map((d) => (
+                  {/* Day headers - sticky */}
+                  {days.map((d, idx) => (
                     <div
                       key={d}
-                      className="flex items-center justify-center border-b border-l border-slate-200 bg-slate-50 text-xs font-medium text-slate-700"
+                      className="sticky top-0 z-10 flex items-center justify-center border-b border-r border-slate-200 bg-white text-xs font-medium text-slate-700"
+                      style={{ left: idx === 0 ? 0 : undefined }}
                     >
                       {d}
                     </div>
                   ))}
 
+                  {/* Time column and day cells */}
                   {hours.map((h) => (
                     <React.Fragment key={h}>
-                      <div className="flex items-start justify-end border-b border-slate-200 bg-white pr-3 pt-3 text-[11px] text-slate-500">
+                      {/* Time label */}
+                      <div className="flex items-start justify-end border-b border-r border-slate-200 bg-white pr-2 pt-2 text-[11px] text-slate-500 sticky left-0 z-10 bg-white">
                         {hourLabel(h)}
                       </div>
                       {days.map((_, dayIdx) => {
                         const isPeak = h >= focusPeakStart && h < focusPeakEnd;
                         const isDip = h >= dipStart;
-                        const baseClass = "border-b border-l border-slate-200";
+                        const baseClass = "border-b border-r border-slate-200";
                         if (isDip) {
                           return (
                             <div
@@ -620,38 +691,43 @@ export default function EquiDashboard() {
                     </React.Fragment>
                   ))}
 
+                  {/* Current time red line */}
                   <div
-                    className="z-10 mx-1 my-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-900"
+                    className="absolute z-20 border-t-2 border-red-500 pointer-events-none"
                     style={{
-                      gridColumnStart: gridColForDayIdx(fixedEvent.dayIdx),
-                      gridColumnEnd: gridColForDayIdx(fixedEvent.dayIdx) + 1,
-                      gridRowStart: gridRowForHour(fixedEvent.start),
-                      gridRowEnd: gridRowForHour(fixedEvent.end),
+                      top: `${currentTimeTop}px`,
+                      left: "64px",
+                      right: 0,
                     }}
                   >
-                    <div className="font-medium">{fixedEvent.title}</div>
-                    <div className="mt-1 text-[11px] text-slate-600">
-                      {hourLabel(fixedEvent.start)}–{hourLabel(fixedEvent.end)}
-                    </div>
+                    <div className="absolute -left-1 -top-[5px] h-2.5 w-2.5 rounded-full bg-red-500" />
                   </div>
 
-                  <div
-                    className="z-10 mx-1 my-1 rounded-lg border border-dashed border-slate-400 bg-white px-3 py-2 text-xs text-slate-900"
-                    style={{
-                      gridColumnStart: gridColForDayIdx(aiEvent.dayIdx),
-                      gridColumnEnd: gridColForDayIdx(aiEvent.dayIdx) + 1,
-                      gridRowStart: gridRowForHour(aiEvent.start),
-                      gridRowEnd: gridRowForHour(aiEvent.end),
-                    }}
-                  >
-                    <div className="flex items-center gap-2 font-medium">
-                      <span aria-hidden="true">✨</span>
-                      {aiEvent.title}
+                  {/* Render real events */}
+                  {userEvents.map((event, idx) => (
+                    <div
+                      key={idx}
+                      className={`z-10 mx-1 my-1 rounded-lg px-3 py-2 text-xs text-slate-900 overflow-hidden ${
+                        event.isFixed
+                          ? "border border-slate-300 bg-slate-50"
+                          : "border border-dashed border-slate-400 bg-white"
+                      }`}
+                      style={{
+                        gridColumnStart: gridColForDayIdx(event.dayIdx),
+                        gridColumnEnd: gridColForDayIdx(event.dayIdx) + 1,
+                        gridRowStart: gridRowForHour(Math.floor(event.start)),
+                        gridRowEnd: gridRowEndForHour(Math.ceil(event.end)),
+                      }}
+                    >
+                      <div className={`font-medium ${!event.isFixed ? "flex items-center gap-2" : ""}`}>
+                        {!event.isFixed && <span aria-hidden="true">✨</span>}
+                        {event.title}
+                      </div>
+                      <div className="mt-1 text-[11px] text-slate-600">
+                        {hourLabel(Math.floor(event.start))}–{hourLabel(Math.ceil(event.end))}
+                      </div>
                     </div>
-                    <div className="mt-1 text-[11px] text-slate-600">
-                      {hourLabel(aiEvent.start)}–{hourLabel(aiEvent.end)}
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </div>
             </div>
