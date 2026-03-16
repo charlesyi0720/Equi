@@ -88,6 +88,7 @@ export default function EquiDashboard() {
   const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isMountedRef = useRef(true);
+  const calendarScrollRef = useRef<HTMLDivElement>(null);
 
   const handleLogout = async () => {
     await signOut();
@@ -414,9 +415,6 @@ export default function EquiDashboard() {
   const focusPeakStart = 10;
   const focusPeakEnd = 13;
   const dipStart = 21;
-
-  // Ref for auto-scrolling
-  const calendarScrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to current time on mount
   useEffect(() => {
