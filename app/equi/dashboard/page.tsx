@@ -330,6 +330,10 @@ export default function EquiDashboard() {
   // ============================================================================
   // RENDER
   // ============================================================================
+  // #region debug log - entering render
+  log('Entering render', { isLoading, hasError: !!error, hasUserData: !!userData });
+  // #endregion
+
   if (isLoading) {
     return <DashboardSkeleton />;
   }
