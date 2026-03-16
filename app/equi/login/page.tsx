@@ -5,7 +5,6 @@ import { signIn, signUp, getSession, onAuthStateChange, getProfile } from "../li
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
-  // Test comment for Vercel redeploy
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -44,7 +43,7 @@ export default function LoginPage() {
           
           const completed = profile?.onboarding_completed === true;
           
-          router.push(completed ? "/equi/dashboard" : "/equi/onboarding");
+          window.location.href = completed ? "/equi/dashboard" : "/equi/onboarding";
           return;
         }
       } catch (err) {
@@ -61,7 +60,7 @@ export default function LoginPage() {
           // Get profile directly from DB
           const { profile } = await getProfile(session.user.id);
           const completed = profile?.onboarding_completed === true;
-          router.push(completed ? "/equi/dashboard" : "/equi/onboarding");
+          window.location.href = completed ? "/equi/dashboard" : "/equi/onboarding";
         } catch (err) {
           console.error("Error in auth state change:", err);
         }
@@ -123,7 +122,7 @@ export default function LoginPage() {
           // Get profile directly from DB
           const { profile } = await getProfile(user.id);
           const completed = profile?.onboarding_completed === true;
-          router.push(completed ? "/equi/dashboard" : "/equi/onboarding");
+          window.location.href = completed ? "/equi/dashboard" : "/equi/onboarding";
         }
       }
     } catch (err) {
