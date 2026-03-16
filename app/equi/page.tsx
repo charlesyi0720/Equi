@@ -16,7 +16,7 @@ export default function EquiPage() {
         const { session } = await getSession();
         
         if (!session) {
-          router.push("/equi/login");
+          window.location.href = "/equi/login";
           return;
         }
 
@@ -24,13 +24,13 @@ export default function EquiPage() {
         const completed = profile?.onboarding_completed === true;
 
         if (completed) {
-          router.push("/equi/dashboard");
+          window.location.href = "/equi/dashboard";
         } else {
           setLoading(false);
         }
       } catch (err) {
         console.error("Auth check error:", err);
-        router.push("/equi/login");
+        window.location.href = "/equi/login";
       }
     };
 
@@ -38,7 +38,7 @@ export default function EquiPage() {
 
     const subscription = onAuthStateChange(async (event, session) => {
       if (event === "SIGNED_OUT") {
-        router.push("/equi/login");
+        window.location.href = "/equi/login";
       }
     });
 
