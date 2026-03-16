@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, FormEvent } from "react";
 import { signIn, signUp, getSession, onAuthStateChange, getProfile } from "../lib/auth";
 import { useRouter } from "next/navigation";
 
@@ -83,7 +83,7 @@ export default function LoginPage() {
     );
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
