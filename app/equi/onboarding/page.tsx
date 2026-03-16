@@ -465,10 +465,10 @@ export default function EquiOnboarding() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#fff] text-[#111] font-sans">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
       {isLoading ? (
-        <div className="min-h-screen bg-[#fff] flex items-center justify-center">
-          <div className="text-xs uppercase tracking-widest text-[#666]">Loading...</div>
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+          <div className="text-xs uppercase tracking-widest text-slate-500">Loading...</div>
         </div>
       ) : (
       <>
@@ -494,6 +494,11 @@ export default function EquiOnboarding() {
         }} />
       ) : (
         <>
+        {isSubmitted && submittedUser ? (
+          <div className="mx-auto w-full max-w-7xl px-6 py-6 lg:py-8">
+            <SummaryView user={submittedUser} />
+          </div>
+        ) : (
         <div className="max-w-2xl mx-auto px-6 py-12">
           <div className="mb-12">
             <h1 className="text-2xl font-light tracking-tight mb-2">EQUI</h1>
@@ -531,10 +536,7 @@ export default function EquiOnboarding() {
           </div>
 
         <AnimatePresence mode="wait">
-          {isSubmitted && submittedUser ? (
-            <SummaryView user={submittedUser} />
-          ) : (
-            <>
+          <>
           {currentStep === 1 && (
             <Step1Identity
               key="step1"
@@ -597,10 +599,10 @@ export default function EquiOnboarding() {
               onSubmit={handleSubmit}
             />
           )}
-            </>
-          )}
+          </>
         </AnimatePresence>
         </div>
+        )}
         </>
       )}
       </>
@@ -1365,151 +1367,227 @@ interface SummaryViewProps {
 
 function SummaryView({ user }: SummaryViewProps) {
   const name = user?.understanding?.name || "User";
-  const occupation = user?.understanding?.occupation || "Professional";
-  const persona = user?.understanding?.preferredAgentPersona || AgentPersona.DevotedSecretary;
-  
-  // Safely calculate fixed slots count
-  const fixedSlotsCount = (user?.lifeStructure?.fixedActivities || []).reduce((count, activity) => {
-    if (activity?.activityType === "strictlyFixed" && activity?.slots && Array.isArray(activity.slots)) {
-      return count + activity.slots.length;
-    }
-    return count;
-  }, 0);
-  
-  // Find flexible activities
-  const flexibleActivities = (user?.lifeStructure?.fixedActivities || []).filter(
-    activity => activity?.activityType === "flexibleFloating"
-  );
-  
-  const personaInfo = {
-    [AgentPersona.DevotedSecretary]: {
-      icon: "✦",
-      greeting: "Hello! I'm here to support you every step of the way.",
-    },
-    [AgentPersona.HardSupervisor]: {
-      icon: "⚡",
-      greeting: "Let's get to work. No excuses, no delays.",
-    },
+
+  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+  const startHour = 8;
+  const endHour = 22;
+  const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i);
+
+  const hourLabel = (h: number) => {
+    const hour12 = h % 12 === 0 ? 12 : h % 12;
+    const ampm = h < 12 ? "AM" : "PM";
+    return `${hour12} ${ampm}`;
   };
-  
-  const currentPersona = personaInfo[persona];
-  
-  // Determine pressure sensitivity label
-  const pressureSensitivity = user?.understanding?.pressureSensitivity ?? 5;
-  const pressureLabel = pressureSensitivity <= 3 ? "High" : pressureSensitivity <= 6 ? "Medium" : "Low";
-  
-  // Determine planning style
-  const planningStyle = user?.understanding?.planningStyle || "Structured";
+
+  const gridColForDayIdx = (dayIdx: number) => dayIdx + 2; // col 1 is time labels
+  const gridRowForHour = (h: number) => (h - startHour) + 2; // row 1 is header
+
+  const focusPeakStart = 10;
+  const focusPeakEnd = 13;
+  const dipStart = 21;
+
+  const fixedEvent = {
+    title: "Econometrics Lecture",
+    dayIdx: 1, // Tue
+    start: 10,
+    end: 12,
+  };
+
+  const aiEvent = {
+    title: "Deep Work: Thesis",
+    dayIdx: 2, // Wed
+    start: 10,
+    end: 13,
+  };
   
   return (
     <motion.div
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="space-y-12"
+      className="space-y-6"
     >
-      {/* Header */}
-      <div className="space-y-4">
-        <h2 className="text-4xl font-light text-[#111] tracking-tight">
-          {name}, your Digital Twin is initialized.
-        </h2>
-        <p className="text-[#666] text-sm">
-          {occupation} • Your personal AI lifestyle architect is ready to help you optimize your time.
-        </p>
+      {/* Top Bar: Executive Briefing */}
+      <div className="w-full rounded-xl border border-slate-200 bg-white px-5 py-4">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 text-slate-700" aria-hidden="true">✨</div>
+          <div className="text-sm leading-relaxed text-slate-700">
+            <span className="font-medium text-slate-900">Good morning, {name}.</span>{" "}
+            Your focus peaks at 10 AM today. I&apos;ve optimized your deep-work blocks accordingly.
+          </div>
+        </div>
       </div>
-      
-      {/* Core Data Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Personality Card */}
-        <div className="p-6 border border-[#111] space-y-4">
-          <div className="text-xs uppercase tracking-widest text-[#666]">Personality Profile</div>
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-sm text-[#666]">MBTI</span>
-              <span className="text-sm font-mono">{user?.understanding?.mbti || "Unknown"}</span>
+
+      {/* Bottom: 30/70 split */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[3fr_7fr]">
+        {/* Left Panel: Copilot Chat */}
+        <div className="rounded-xl border border-slate-200 bg-white">
+          <div className="border-b border-slate-200 px-5 py-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-medium text-slate-900">Executive Copilot</div>
+              <div className="text-xs text-slate-500">Online</div>
             </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-[#666]">Pressure Sensitivity</span>
-              <span className="text-sm font-mono">{pressureLabel}</span>
+          </div>
+
+          <div className="px-5 py-4">
+            <div className="h-[420px] rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+              <div className="space-y-3">
+                <div className="max-w-[85%] rounded-xl border border-slate-200 bg-white px-3 py-2">
+                  Good morning. Want me to shape today around your 10 AM–1 PM peak?
+                </div>
+                <div className="ml-auto max-w-[85%] rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-700">
+                  Yes—prioritize thesis work and keep meetings light.
+                </div>
+                <div className="max-w-[85%] rounded-xl border border-slate-200 bg-white px-3 py-2">
+                  Done. I&apos;ve placed a deep-work block during your peak and kept the evening low-friction.
+                </div>
+              </div>
             </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-[#666]">Planning Style</span>
-              <span className="text-sm font-mono">{planningStyle}</span>
+
+            <div className="mt-4 space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <button className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">
+                  ⚡ Optimize Today
+                </button>
+                <button className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">
+                  🧘 I&apos;m exhausted
+                </button>
+                <button className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">
+                  📅 Export
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                  placeholder="Message your copilot…"
+                />
+                <button className="h-11 shrink-0 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 hover:bg-slate-50">
+                  Send
+                </button>
+              </div>
+              <div className="text-xs text-slate-500">
+                Tip: try “Protect a 90-minute deep-work block.”
+              </div>
             </div>
           </div>
         </div>
-        
-        {/* Time Assets Card */}
-        <div className="p-6 border border-[#111] space-y-4">
-          <div className="text-xs uppercase tracking-widest text-[#666]">Time Assets</div>
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-sm text-[#666]">Fixed Slots</span>
-              <span className="text-sm font-mono">{fixedSlotsCount} Detected</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-[#666]">Focus Peaks</span>
-              <span className="text-sm font-mono">
-                {(user?.understanding?.biologicalClock?.focusPeaks || []).length} periods
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-[#666]">Life Mode</span>
-              <span className="text-sm font-mono">{user?.understanding?.lifeState?.mode || "Normal"}</span>
+
+        {/* Right Panel: Energy-Aware Weekly Calendar */}
+        <div className="rounded-xl border border-slate-200 bg-white">
+          <div className="border-b border-slate-200 px-5 py-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium text-slate-900">This Week</div>
+                <div className="mt-1 text-xs text-slate-500">Mon–Sun · 8 AM–10 PM</div>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-slate-500">
+                <div className="flex items-center gap-2">
+                  <span className="inline-block h-3 w-3 rounded border border-slate-200 bg-blue-50/60" />
+                  Focus peak
+                </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className="inline-block h-3 w-3 rounded border border-slate-200"
+                    style={{
+                      backgroundImage:
+                        "repeating-linear-gradient(135deg, rgba(148,163,184,0.25) 0px, rgba(148,163,184,0.25) 4px, rgba(255,255,255,0) 4px, rgba(255,255,255,0) 10px)",
+                    }}
+                  />
+                  Energy dip
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-        
-        {/* Flexible Tasks Card */}
-        <div className="p-6 border border-[#111] space-y-4">
-          <div className="text-xs uppercase tracking-widest text-[#666]">Flexible Tasks</div>
-          <div className="space-y-2">
-            {flexibleActivities.length > 0 ? (
-              flexibleActivities.map((activity, index) => {
-                const hours = activity?.flexibleQuota?.dailyMinutes 
-                  ? (activity.flexibleQuota.dailyMinutes / 60).toFixed(1) 
-                  : "0";
-                return (
-                  <div key={index} className="flex justify-between">
-                    <span className="text-sm text-[#666] truncate mr-2">{activity.label || "Activity"}</span>
-                    <span className="text-sm font-mono whitespace-nowrap">{hours}h</span>
+
+          <div className="px-5 py-4">
+            <div className="overflow-x-auto">
+              <div
+                className="grid min-w-[900px] rounded-xl border border-slate-200"
+                style={{
+                  gridTemplateColumns: "80px repeat(7, minmax(0, 1fr))",
+                  gridTemplateRows: `44px repeat(${hours.length}, 48px)`,
+                }}
+              >
+                {/* Header corner */}
+                <div className="border-b border-slate-200 bg-slate-50" />
+
+                {/* Day headers */}
+                {days.map((d) => (
+                  <div
+                    key={d}
+                    className="flex items-center justify-center border-b border-l border-slate-200 bg-slate-50 text-xs font-medium text-slate-700"
+                  >
+                    {d}
                   </div>
-                );
-              })
-            ) : (
-              <div className="text-sm text-[#666]">No flexible quotas set</div>
-            )}
-          </div>
-        </div>
-      </div>
-      
-      {/* Agent Persona Section */}
-      <div className="p-6 border border-[#111] space-y-4">
-        <div className="text-xs uppercase tracking-widest text-[#666]">Your Agent</div>
-        <div className="flex items-center gap-6">
-          <div className="w-16 h-16 bg-[#111] text-[#fff] flex items-center justify-center text-3xl">
-            {currentPersona.icon}
-          </div>
-          <div className="flex-1">
-            <div className="text-lg font-medium mb-1">
-              {persona === AgentPersona.DevotedSecretary ? "Devoted Secretary" : "Hard Supervisor"}
+                ))}
+
+                {/* Time labels + grid cells */}
+                {hours.map((h) => (
+                  <React.Fragment key={h}>
+                    <div className="flex items-start justify-end border-b border-slate-200 bg-white pr-3 pt-3 text-[11px] text-slate-500">
+                      {hourLabel(h)}
+                    </div>
+                    {days.map((_, dayIdx) => {
+                      const isPeak = h >= focusPeakStart && h < focusPeakEnd;
+                      const isDip = h >= dipStart;
+                      const baseClass = "border-b border-l border-slate-200";
+                      if (isDip) {
+                        return (
+                          <div
+                            key={`${dayIdx}-${h}`}
+                            className={`${baseClass} bg-white`}
+                            style={{
+                              backgroundImage:
+                                "repeating-linear-gradient(135deg, rgba(148,163,184,0.22) 0px, rgba(148,163,184,0.22) 4px, rgba(255,255,255,0) 4px, rgba(255,255,255,0) 12px)",
+                            }}
+                          />
+                        );
+                      }
+                      return (
+                        <div
+                          key={`${dayIdx}-${h}`}
+                          className={`${baseClass} ${isPeak ? "bg-blue-50/40" : "bg-white"}`}
+                        />
+                      );
+                    })}
+                  </React.Fragment>
+                ))}
+
+                {/* Fixed event */}
+                <div
+                  className="z-10 mx-1 my-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-900"
+                  style={{
+                    gridColumnStart: gridColForDayIdx(fixedEvent.dayIdx),
+                    gridColumnEnd: gridColForDayIdx(fixedEvent.dayIdx) + 1,
+                    gridRowStart: gridRowForHour(fixedEvent.start),
+                    gridRowEnd: gridRowForHour(fixedEvent.end),
+                  }}
+                >
+                  <div className="font-medium">{fixedEvent.title}</div>
+                  <div className="mt-1 text-[11px] text-slate-600">{hourLabel(fixedEvent.start)}–{hourLabel(fixedEvent.end)}</div>
+                </div>
+
+                {/* AI suggested event */}
+                <div
+                  className="z-10 mx-1 my-1 rounded-lg border border-dashed border-slate-400 bg-white px-3 py-2 text-xs text-slate-900"
+                  style={{
+                    gridColumnStart: gridColForDayIdx(aiEvent.dayIdx),
+                    gridColumnEnd: gridColForDayIdx(aiEvent.dayIdx) + 1,
+                    gridRowStart: gridRowForHour(aiEvent.start),
+                    gridRowEnd: gridRowForHour(aiEvent.end),
+                  }}
+                >
+                  <div className="flex items-center gap-2 font-medium">
+                    <span aria-hidden="true">✨</span>
+                    {aiEvent.title}
+                  </div>
+                  <div className="mt-1 text-[11px] text-slate-600">{hourLabel(aiEvent.start)}–{hourLabel(aiEvent.end)}</div>
+                </div>
+              </div>
             </div>
-            <div className="text-sm text-[#666]">{currentPersona.greeting}</div>
           </div>
         </div>
-      </div>
-      
-      {/* Action Button */}
-      <div className="pt-6 border-t border-[#eee]">
-        <a
-          href="/equi/dashboard"
-          className="block w-full px-8 py-4 text-sm uppercase tracking-widest bg-[#111] text-[#fff] hover:bg-[#333] transition-colors text-center"
-        >
-          Go to Dashboard
-        </a>
-        <p className="text-xs text-[#666] text-center mt-4">
-          Your data has been saved. Start using Equi now.
-        </p>
       </div>
     </motion.div>
   );

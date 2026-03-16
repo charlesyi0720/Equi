@@ -22,56 +22,33 @@ interface Message {
 
 function DashboardSkeleton() {
   return (
-    <div className="min-h-screen bg-[#fff] text-[#111] font-sans">
-      <header className="border-b border-[#eee] px-6 py-4 animate-pulse">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div>
-            <div className="h-6 w-16 bg-[#eee] rounded"></div>
-            <div className="h-3 w-40 bg-[#eee] rounded mt-1"></div>
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
+      <div className="mx-auto w-full max-w-7xl px-6 py-6 lg:py-8">
+        <div className="rounded-xl border border-slate-200 bg-white px-5 py-4 animate-pulse">
+          <div className="h-3 w-80 bg-slate-100 rounded" />
+          <div className="mt-2 h-3 w-[520px] bg-slate-100 rounded" />
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[3fr_7fr]">
+          <div className="rounded-xl border border-slate-200 bg-white animate-pulse">
+            <div className="border-b border-slate-200 px-5 py-4">
+              <div className="h-3 w-32 bg-slate-100 rounded" />
+            </div>
+            <div className="px-5 py-4">
+              <div className="h-[420px] rounded-xl border border-slate-200 bg-slate-50" />
+              <div className="mt-4 h-11 rounded-xl border border-slate-200 bg-white" />
+            </div>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <div className="h-4 w-20 bg-[#eee] rounded"></div>
-              <div className="h-3 w-16 bg-[#eee] rounded mt-1"></div>
+
+          <div className="rounded-xl border border-slate-200 bg-white animate-pulse">
+            <div className="border-b border-slate-200 px-5 py-4">
+              <div className="h-3 w-24 bg-slate-100 rounded" />
+            </div>
+            <div className="px-5 py-4">
+              <div className="h-[520px] rounded-xl border border-slate-200 bg-white" />
             </div>
           </div>
         </div>
-      </header>
-
-      <div className="max-w-7xl mx-auto grid grid-cols-12 min-h-[calc(100vh-80px)]">
-        <section className="col-span-3 border-r border-[#eee] p-6">
-          <div className="space-y-8 animate-pulse">
-            <div>
-              <div className="h-3 w-16 bg-[#eee] rounded mb-4"></div>
-              <div className="space-y-3">
-                <div className="h-4 w-full bg-[#eee] rounded"></div>
-                <div className="h-4 w-3/4 bg-[#eee] rounded"></div>
-              </div>
-            </div>
-          </div>
-        </section>
-        <section className="col-span-6 flex flex-col border-r border-[#eee]">
-          <div className="px-6 py-4 border-b border-[#eee]">
-            <div className="h-3 w-24 bg-[#eee] rounded animate-pulse"></div>
-          </div>
-          <div className="flex-1 p-6 space-y-4">
-            <div className="h-16 w-3/4 bg-[#eee] rounded"></div>
-            <div className="h-16 w-1/2 bg-[#eee] rounded ml-auto"></div>
-          </div>
-          <div className="px-6 py-4 border-t border-[#eee]">
-            <div className="h-10 w-full bg-[#eee] rounded"></div>
-          </div>
-        </section>
-        <section className="col-span-3 p-6">
-          <div className="space-y-8 animate-pulse">
-            <div>
-              <div className="h-3 w-12 bg-[#eee] rounded mb-4"></div>
-              <div className="space-y-3">
-                <div className="h-20 bg-[#eee] rounded"></div>
-              </div>
-            </div>
-          </div>
-        </section>
       </div>
     </div>
   );
@@ -83,13 +60,13 @@ function DashboardSkeleton() {
 
 function ErrorDisplay({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div className="min-h-screen bg-[#fff] flex items-center justify-center">
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
       <div className="text-center space-y-4 max-w-md p-6">
         <div className="text-lg text-red-600 font-medium">Connection Error</div>
-        <div className="text-sm text-[#666]">{message}</div>
+        <div className="text-sm text-slate-600">{message}</div>
         <button
           onClick={onRetry}
-          className="px-6 py-2 text-sm border border-[#111] hover:bg-[#111] hover:text-[#fff] transition-colors"
+          className="px-6 py-2 text-sm rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition-colors"
         >
           Retry
         </button>
@@ -237,7 +214,9 @@ export default function EquiDashboard() {
       const openingMessage: Message = {
         id: generateId(),
         role: "assistant",
-        content: data.openingMessage || "让我帮你优化今天的时间安排。",
+        content:
+          data.openingMessage ||
+          "Good morning. Want me to shape today around your 10 AM–1 PM focus peak?",
         timestamp: new Date(),
       };
       
@@ -247,7 +226,7 @@ export default function EquiDashboard() {
       const fallbackMessage: Message = {
         id: generateId(),
         role: "assistant",
-        content: "你好，我是 Equi。今天有什么我可以帮你的？",
+        content: "Good morning. What would you like to accomplish today?",
         timestamp: new Date(),
       };
       setMessages([fallbackMessage]);
@@ -321,7 +300,7 @@ export default function EquiDashboard() {
       const errorMessage: Message = {
         id: generateId(),
         role: "assistant",
-        content: "抱歉，我遇到了一些问题。请稍后再试。",
+        content: "Sorry — I hit a snag. Please try again.",
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
@@ -343,10 +322,10 @@ export default function EquiDashboard() {
 
   if (!userData) {
     return (
-      <div className="min-h-screen bg-[#fff] flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
           <div className="text-lg">No user data found</div>
-          <a href="/equi/onboarding" className="text-xs underline text-[#666] mt-2 block">
+          <a href="/equi/onboarding" className="text-xs underline text-slate-600 mt-2 block">
             Go to Onboarding
           </a>
         </div>
@@ -354,175 +333,330 @@ export default function EquiDashboard() {
     );
   }
 
-  const { name, occupation, mbti, preferredAgentPersona } = userData.understanding || {};
-  const personaLabel = preferredAgentPersona === "HardSupervisor" ? "Hard Supervisor" : "Devoted Secretary";
+  const name = userData?.understanding?.name || "User";
+
+  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+  const startHour = 8;
+  const endHour = 22;
+  const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i);
+
+  const hourLabel = (h: number) => {
+    const hour12 = h % 12 === 0 ? 12 : h % 12;
+    const ampm = h < 12 ? "AM" : "PM";
+    return `${hour12} ${ampm}`;
+  };
+
+  const gridColForDayIdx = (dayIdx: number) => dayIdx + 2;
+  const gridRowForHour = (h: number) => (h - startHour) + 2;
+
+  const focusPeakStart = 10;
+  const focusPeakEnd = 13;
+  const dipStart = 21;
+
+  const fixedEvent = {
+    title: "Econometrics Lecture",
+    dayIdx: 1, // Tue
+    start: 10,
+    end: 12,
+  };
+
+  const aiEvent = {
+    title: "Deep Work: Thesis",
+    dayIdx: 2, // Wed
+    start: 10,
+    end: 13,
+  };
+
+  const submitQuickAction = async (text: string) => {
+    if (!text.trim() || isStreaming) return;
+
+    const userMessage: Message = {
+      id: generateId(),
+      role: "user",
+      content: text.trim(),
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setIsStreaming(true);
+
+    const conversationHistory = [...messages, userMessage].map((m) => ({
+      role: m.role === "user" ? "user" : "model",
+      content: m.content,
+    }));
+
+    const userContext = {
+      mbti: userData?.understanding?.mbti,
+      focusPeaks: userData?.understanding?.biologicalClock?.focusPeaks,
+      energyDips: userData?.understanding?.biologicalClock?.energyDips,
+    };
+
+    try {
+      const response = await fetch("/api/synthesis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: userMessage.content,
+          conversationHistory,
+          userData: userContext,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to get response");
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      const assistantMessage: Message = {
+        id: generateId(),
+        role: "assistant",
+        content: "",
+        timestamp: new Date(),
+      };
+
+      setMessages((prev) => [...prev, assistantMessage]);
+
+      while (true) {
+        const { done, value } = await reader!.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        assistantMessage.content += chunk;
+
+        setMessages((prev) =>
+          prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantMessage.content } : m))
+        );
+      }
+    } catch (error) {
+      console.error("Error sending message:", error);
+      const errorMessage: Message = {
+        id: generateId(),
+        role: "assistant",
+        content: "Sorry — I hit a snag. Please try again.",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsStreaming(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-[#fff] text-[#111] font-sans">
-      <header className="border-b border-[#eee] px-6 py-4">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div>
-            <h1 className="text-xl font-light tracking-tight">EQUI</h1>
-            <p className="text-xs text-[#666] uppercase tracking-widest">Personal AI Lifestyle Architect</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <div className="text-sm font-medium">{name}</div>
-              <div className="text-xs text-[#666]">{occupation}</div>
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
+      <div className="mx-auto w-full max-w-7xl px-6 py-6 lg:py-8">
+        {/* Top: Executive Briefing */}
+        <div className="w-full rounded-xl border border-slate-200 bg-white px-5 py-4">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 text-slate-700" aria-hidden="true">✨</div>
+            <div className="text-sm leading-relaxed text-slate-700">
+              <span className="font-medium text-slate-900">Good morning, {name}.</span>{" "}
+              Your focus peaks at 10 AM today. I&apos;ve optimized your deep-work blocks accordingly.
             </div>
-            <button onClick={handleLogout} className="text-xs text-[#999] hover:text-[#111] transition-colors underline">
+          </div>
+          <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+            <div>Executive Copilot · Weekly view</div>
+            <button
+              onClick={handleLogout}
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+            >
               Logout
             </button>
           </div>
         </div>
-      </header>
 
-      <div className="max-w-7xl mx-auto grid grid-cols-12 min-h-[calc(100vh-80px)]">
-        <section className="col-span-3 border-r border-[#eee] p-6">
-          <div className="space-y-8">
-            <div>
-              <h2 className="text-xs uppercase tracking-widest text-[#666] mb-4">Profile</h2>
-              <div className="space-y-4">
-                <div className="flex justify-between text-sm">
-                  <span className="text-[#666]">MBTI</span>
-                  <span className="font-mono">{mbti || "—"}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-[#666]">Persona</span>
-                  <span>{personaLabel}</span>
-                </div>
+        {/* Bottom: 30/70 split */}
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[3fr_7fr]">
+          {/* Left Panel: Copilot Chat */}
+          <div className="rounded-xl border border-slate-200 bg-white">
+            <div className="border-b border-slate-200 px-5 py-4">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium text-slate-900">Executive Copilot</div>
+                <div className="text-xs text-slate-500">{isStreaming ? "Thinking…" : "Ready"}</div>
               </div>
             </div>
 
-            <div>
-              <h2 className="text-xs uppercase tracking-widest text-[#666] mb-4">Biological Clock</h2>
-              <div className="space-y-4">
-                <div>
-                  <div className="text-xs text-[#666] mb-2">Focus Peaks</div>
-                  <div className="space-y-1">
-                    {(userData.understanding?.biologicalClock?.focusPeaks || []).slice(0, 3).map((peak, i) => (
-                      <div key={i} className="text-xs">
-                        {peak.weekday} {peak.start.hour}:00-{peak.end.hour}:00
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-[#666] mb-2">Energy Dips</div>
-                  <div className="space-y-1">
-                    {(userData.understanding?.biologicalClock?.energyDips || []).slice(0, 3).map((dip, i) => (
-                      <div key={i} className="text-xs">
-                        {dip.weekday} {dip.start.hour}:00-{dip.end.hour}:00
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h2 className="text-xs uppercase tracking-widest text-[#666] mb-4">Fixed Activities</h2>
-              <div className="space-y-2">
-                {(userData.lifeStructure?.fixedActivities || []).length === 0 ? (
-                  <div className="text-xs text-[#999]">No fixed activities</div>
-                ) : (
-                  (userData.lifeStructure?.fixedActivities || []).slice(0, 5).map((activity, i) => (
-                    <div key={i} className="text-xs flex justify-between">
-                      <span className="truncate">{activity.label}</span>
-                      <span className="text-[#666]">{activity.slots?.length || 0} slots</span>
+            <div className="px-5 py-4">
+              <div className="h-[420px] overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                <div className="space-y-3">
+                  {messages.map((m) => (
+                    <div
+                      key={m.id}
+                      className={
+                        m.role === "user"
+                          ? "ml-auto max-w-[85%] rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-700"
+                          : "max-w-[85%] rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-800"
+                      }
+                    >
+                      {m.content}
                     </div>
-                  ))
-                )}
+                  ))}
+                  <div ref={messagesEndRef} />
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => submitQuickAction("Optimize my day around my focus peaks.")}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    disabled={isStreaming}
+                  >
+                    ⚡ Optimize Today
+                  </button>
+                  <button
+                    onClick={() => submitQuickAction("I’m exhausted. Make today lighter and protect recovery time.")}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    disabled={isStreaming}
+                  >
+                    🧘 I&apos;m exhausted
+                  </button>
+                  <button
+                    onClick={() => submitQuickAction("Export my plan for today to my calendar.")}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    disabled={isStreaming}
+                  >
+                    📅 Export
+                  </button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    placeholder="Message your copilot…"
+                    disabled={isStreaming}
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200 disabled:opacity-60"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!inputValue.trim() || isStreaming}
+                    className="h-11 shrink-0 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Send
+                  </button>
+                </form>
+
+                <div className="text-xs text-slate-500">Try: “Protect a 90-minute deep-work block.”</div>
               </div>
             </div>
           </div>
-        </section>
 
-        <section className="col-span-6 flex flex-col border-r border-[#eee]">
-          <div className="px-6 py-4 border-b border-[#eee]">
-            <h2 className="text-xs uppercase tracking-widest text-[#666]">Equi Assistant</h2>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {messages.map((message) => (
-              <div key={message.id} className={message.role === "user" ? "ml-12" : "mr-12"}>
-                {message.role === "user" ? (
-                  <div className="text-sm">{message.content}</div>
-                ) : (
-                  <div className="text-sm font-serif italic text-[#444] leading-relaxed">
-                    {message.content}
-                    {isStreaming && message.id === messages[messages.length - 1]?.id && (
-                      <span className="animate-pulse">|</span>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
-
-          <div className="px-6 py-4 border-t border-[#eee]">
-            <form onSubmit={handleSubmit} className="relative">
-              <input
-                type="text"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                placeholder="Ask Equi..."
-                disabled={isStreaming}
-                className="w-full py-3 pr-4 text-sm bg-transparent outline-none border-b border-[#ddd] focus:border-[#111] transition-colors placeholder:text-[#ccc]"
-              />
-              <button
-                type="submit"
-                disabled={!inputValue.trim() || isStreaming}
-                className="absolute right-0 top-1/2 -translate-y-1/2 text-xs uppercase tracking-widest text-[#666] hover:text-[#111] disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                Send
-              </button>
-            </form>
-          </div>
-        </section>
-
-        <section className="col-span-3 p-6">
-          <div className="space-y-8">
-            <div>
-              <h2 className="text-xs uppercase tracking-widest text-[#666] mb-4">Today</h2>
-              <div className="space-y-4">
-                <div className="p-4 border border-[#eee]">
-                  <div className="text-xs text-[#666] mb-1">Fixed Slots</div>
-                  <div className="text-2xl font-light">
-                    {(userData.lifeStructure?.fixedActivities || []).reduce(
-                      (count, activity) => count + (activity.slots?.length || 0), 0
-                    )}
-                  </div>
+          {/* Right Panel: Energy-Aware Weekly Calendar */}
+          <div className="rounded-xl border border-slate-200 bg-white">
+            <div className="border-b border-slate-200 px-5 py-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-medium text-slate-900">This Week</div>
+                  <div className="mt-1 text-xs text-slate-500">Mon–Sun · 8 AM–10 PM</div>
                 </div>
-                <div className="p-4 border border-[#eee]">
-                  <div className="text-xs text-[#666] mb-1">Focus Periods</div>
-                  <div className="text-2xl font-light">
-                    {userData.understanding?.biologicalClock?.focusPeaks?.length || 0}
+                <div className="flex items-center gap-3 text-xs text-slate-500">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block h-3 w-3 rounded border border-slate-200 bg-blue-50/60" />
+                    Focus peak
                   </div>
-                </div>
-                <div className="p-4 border border-[#eee]">
-                  <div className="text-xs text-[#666] mb-1">Life Mode</div>
-                  <div className="text-lg font-light">
-                    {userData.understanding?.lifeState?.mode || "Normal"}
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="inline-block h-3 w-3 rounded border border-slate-200"
+                      style={{
+                        backgroundImage:
+                          "repeating-linear-gradient(135deg, rgba(148,163,184,0.25) 0px, rgba(148,163,184,0.25) 4px, rgba(255,255,255,0) 4px, rgba(255,255,255,0) 10px)",
+                      }}
+                    />
+                    Energy dip
                   </div>
                 </div>
               </div>
             </div>
 
-            <div>
-              <h2 className="text-xs uppercase tracking-widest text-[#666] mb-4">Actions</h2>
-              <div className="space-y-2">
-                <button className="w-full text-left px-4 py-3 text-sm border border-[#eee] hover:border-[#111] transition-colors">
-                  Export Schedule
-                </button>
-                <button className="w-full text-left px-4 py-3 text-sm border border-[#eee] hover:border-[#111] transition-colors">
-                  Edit Profile
-                </button>
+            <div className="px-5 py-4">
+              <div className="overflow-x-auto">
+                <div
+                  className="grid min-w-[900px] rounded-xl border border-slate-200"
+                  style={{
+                    gridTemplateColumns: "80px repeat(7, minmax(0, 1fr))",
+                    gridTemplateRows: `44px repeat(${hours.length}, 48px)`,
+                  }}
+                >
+                  <div className="border-b border-slate-200 bg-slate-50" />
+
+                  {days.map((d) => (
+                    <div
+                      key={d}
+                      className="flex items-center justify-center border-b border-l border-slate-200 bg-slate-50 text-xs font-medium text-slate-700"
+                    >
+                      {d}
+                    </div>
+                  ))}
+
+                  {hours.map((h) => (
+                    <React.Fragment key={h}>
+                      <div className="flex items-start justify-end border-b border-slate-200 bg-white pr-3 pt-3 text-[11px] text-slate-500">
+                        {hourLabel(h)}
+                      </div>
+                      {days.map((_, dayIdx) => {
+                        const isPeak = h >= focusPeakStart && h < focusPeakEnd;
+                        const isDip = h >= dipStart;
+                        const baseClass = "border-b border-l border-slate-200";
+                        if (isDip) {
+                          return (
+                            <div
+                              key={`${dayIdx}-${h}`}
+                              className={`${baseClass} bg-white`}
+                              style={{
+                                backgroundImage:
+                                  "repeating-linear-gradient(135deg, rgba(148,163,184,0.22) 0px, rgba(148,163,184,0.22) 4px, rgba(255,255,255,0) 4px, rgba(255,255,255,0) 12px)",
+                              }}
+                            />
+                          );
+                        }
+                        return (
+                          <div
+                            key={`${dayIdx}-${h}`}
+                            className={`${baseClass} ${isPeak ? "bg-blue-50/40" : "bg-white"}`}
+                          />
+                        );
+                      })}
+                    </React.Fragment>
+                  ))}
+
+                  <div
+                    className="z-10 mx-1 my-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-900"
+                    style={{
+                      gridColumnStart: gridColForDayIdx(fixedEvent.dayIdx),
+                      gridColumnEnd: gridColForDayIdx(fixedEvent.dayIdx) + 1,
+                      gridRowStart: gridRowForHour(fixedEvent.start),
+                      gridRowEnd: gridRowForHour(fixedEvent.end),
+                    }}
+                  >
+                    <div className="font-medium">{fixedEvent.title}</div>
+                    <div className="mt-1 text-[11px] text-slate-600">
+                      {hourLabel(fixedEvent.start)}–{hourLabel(fixedEvent.end)}
+                    </div>
+                  </div>
+
+                  <div
+                    className="z-10 mx-1 my-1 rounded-lg border border-dashed border-slate-400 bg-white px-3 py-2 text-xs text-slate-900"
+                    style={{
+                      gridColumnStart: gridColForDayIdx(aiEvent.dayIdx),
+                      gridColumnEnd: gridColForDayIdx(aiEvent.dayIdx) + 1,
+                      gridRowStart: gridRowForHour(aiEvent.start),
+                      gridRowEnd: gridRowForHour(aiEvent.end),
+                    }}
+                  >
+                    <div className="flex items-center gap-2 font-medium">
+                      <span aria-hidden="true">✨</span>
+                      {aiEvent.title}
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-600">
+                      {hourLabel(aiEvent.start)}–{hourLabel(aiEvent.end)}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-        </section>
+        </div>
       </div>
     </div>
   );
