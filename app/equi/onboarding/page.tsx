@@ -1,7 +1,46 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Component } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+
+// Error Boundary for catching React errors
+class ErrorBoundary extends Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("[ONBOARDING ERROR BOUNDARY] Caught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <div className="text-lg text-red-600">Something went wrong</div>
+            <div className="text-sm text-slate-500">{this.state.error?.message}</div>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-slate-900 text-white rounded"
+            >
+              Reload Page
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 import {
   AgentPersona,
   LifeMode,
@@ -55,7 +94,7 @@ function generateId(): string {
 // MAIN COMPONENT
 // ============================================================================
 
-export default function EquiOnboarding() {
+function OnboardingContent() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [currentStep, setCurrentStep] = useState(0);
@@ -1586,5 +1625,14 @@ function SummaryView({ user }: SummaryViewProps) {
         </div>
       </div>
     </motion.div>
+  );
+}
+
+// Wrapper with Error Boundary
+export default function EquiOnboarding() {
+  return (
+    <ErrorBoundary>
+      <OnboardingContent />
+    </ErrorBoundary>
   );
 }
