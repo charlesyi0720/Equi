@@ -1,0 +1,18 @@
+---
+description: Vercel 部署配置信息
+alwaysApply: true
+---
+
+# 项目部署信息
+
+## 生产环境
+
+- **部署平台**: Vercel
+- **域名**: https://equi-charlesyi0720s-projects.vercel.app
+- **访问路径**: /equi/login
+
+## 开发说明
+
+- 本地开发使用 `npm run dev` 启动 localhost:3000
+- 生产环境直接访问上述 Vercel 域名
+- API 路由在生产环境中为: https://equi-charlesyi0720s-projects.vercel.app/api/*
