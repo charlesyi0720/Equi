@@ -120,10 +120,6 @@ export function StepCalibration({ formData, updateFormData, onNext, onBack }: St
   const mbtiCode = getMBTICode(axisValues);
   const trait = MBTI_DESCRIPTIONS[mbtiCode] || "Unknown";
 
-  useEffect(() => {
-    updateFormData({ understanding: { mbti: mbtiCode } });
-  }, [mbtiCode, updateFormData]);
-
   const handleToggle = (i: number, value: number) => {
     setEdited(true);
     const newAxes = [...axisValues];

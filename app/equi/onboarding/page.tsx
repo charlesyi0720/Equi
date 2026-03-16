@@ -599,7 +599,13 @@ function OnboardingContent() {
             />
           )}
           {currentStep === 4 && (
-            <div className="p-8">Step 4 - MBTI Calibration</div>
+            <StepCalibration
+              key="step4"
+              formData={formData}
+              updateFormData={updateFormData}
+              onNext={nextStep}
+              onBack={prevStep}
+            />
           )}
           {currentStep === 5 && (
             <Step4Structures
