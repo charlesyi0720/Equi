@@ -367,12 +367,15 @@ function DashboardContent() {
 
   // Auto-scroll to current time on mount - must be BEFORE early returns
   useEffect(() => {
-    // Default to 8:30 AM view (similar to Google Calendar)
-    // 8.5 hours * 64px + 44px header = 588px, offset a bit for better view
-    if (calendarScrollRef.current) {
-      calendarScrollRef.current.scrollTop = 500;
+    // Scroll to 8:30 AM after loading completes
+    if (!isLoading && calendarScrollRef.current) {
+      // Delay 50ms to wait for browser CSS Grid rendering
+      const timer = setTimeout(() => {
+        calendarScrollRef.current!.scrollTop = 500;
+      }, 50);
+      return () => clearTimeout(timer);
     }
-  }, []); // Only run once on mount
+  }, [isLoading]);
 
   if (isLoading) {
     return <DashboardSkeleton />;
