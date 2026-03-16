@@ -174,17 +174,13 @@ export default function EquiOnboarding() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [currentStep]);
 
+  // Form update helper
   const updateFormData = (data: Partial<typeof formData>) => {
     setFormData((prev) => ({ ...prev, ...data }));
   };
 
   const nextStep = () => setCurrentStep((prev) => Math.min(prev + 1, 7));
   const prevStep = () => setCurrentStep((prev) => Math.max(prev - 1, 0));
-
-  // Scroll to top on step transition
-  useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [currentStep]);
 
   // Hydration: Load data from Supabase on mount
   useEffect(() => {
