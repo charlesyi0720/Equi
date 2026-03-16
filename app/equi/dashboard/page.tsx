@@ -355,6 +355,25 @@ function DashboardContent() {
   // RENDER
   // ============================================================================
 
+  // Calendar time calculations - must be BEFORE early returns
+  const headerHeight = 44;
+  const hourRowHeight = 64; // h-16 = 64px per hour
+
+  // Get current time for the red line
+  const now = new Date();
+  const currentHour = now.getHours();
+  const currentMinute = now.getMinutes();
+  const currentTimeTop = headerHeight + (currentHour * hourRowHeight) + (currentMinute / 60) * hourRowHeight;
+
+  // Auto-scroll to current time on mount - must be BEFORE early returns
+  useEffect(() => {
+    if (!Number.isFinite(currentTimeTop)) return;
+    const targetScroll = Math.max(0, currentTimeTop - 150); // 150px above current time
+    if (calendarScrollRef.current) {
+      calendarScrollRef.current.scrollTop = targetScroll;
+    }
+  }, [currentTimeTop]);
+
   if (isLoading) {
     return <DashboardSkeleton />;
   }
@@ -382,14 +401,6 @@ function DashboardContent() {
   const startHour = 0;
   const endHour = 23;
   const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i);
-  const hourRowHeight = 64; // h-16 = 64px per hour
-  const headerHeight = 44;
-
-  // Get current time for the red line
-  const now = new Date();
-  const currentHour = now.getHours();
-  const currentMinute = now.getMinutes();
-  const currentTimeTop = headerHeight + (currentHour * hourRowHeight) + (currentMinute / 60) * hourRowHeight;
 
   // Build real events from userData
   const userEvents: Array<{
@@ -460,15 +471,6 @@ function DashboardContent() {
   const focusPeakStart = 10;
   const focusPeakEnd = 13;
   const dipStart = 21;
-
-  // Auto-scroll to current time on mount
-  useEffect(() => {
-    if (!Number.isFinite(currentTimeTop)) return;
-    const targetScroll = Math.max(0, currentTimeTop - 150); // 150px above current time
-    if (calendarScrollRef.current) {
-      calendarScrollRef.current.scrollTop = targetScroll;
-    }
-  }, [currentTimeTop]);
 
   const submitQuickAction = async (text: string) => {
     if (!text.trim() || isStreaming) return;
