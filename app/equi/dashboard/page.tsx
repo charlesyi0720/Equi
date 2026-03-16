@@ -79,22 +79,7 @@ function ErrorDisplay({ message, onRetry }: { message: string; onRetry: () => vo
 // DASHBOARD COMPONENT
 // ============================================================================
 
-// #region debug logging
-const DEBUG_ENDPOINT = 'http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228';
-const log = (msg: string, data: any) => {
-  fetch(DEBUG_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '499517' },
-    body: JSON.stringify({ sessionId: '499517', location: 'dashboard/page.tsx', message: msg, data, timestamp: Date.now() })
-  }).catch(() => {});
-};
-// #endregion
-
 export default function EquiDashboard() {
-  // #region debug log - component mount
-  log('EquiDashboard mounted', { timestamp: Date.now() });
-  // #endregion
-
   const [userData, setUserData] = useState<EquiUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -128,9 +113,6 @@ export default function EquiDashboard() {
       }
 
       if (!user) {
-        // #region debug log - redirect to login
-        log('No user found, redirecting to /equi/login', { timestamp: Date.now() });
-        // #endregion
         window.location.href = "/equi/login";
         return;
       }
@@ -212,25 +194,6 @@ export default function EquiDashboard() {
     }
   }, [userData]);
 
-  // Fetch wrapper for debugging
-  const debugFetch = async (url: string, options?: RequestInit) => {
-    // #region debug log - fetch start
-    log('Fetch started', { url, method: options?.method || 'GET' });
-    // #endregion
-    try {
-      const response = await fetch(url, options);
-      // #region debug log - fetch complete
-      log('Fetch complete', { url, status: response.status });
-      // #endregion
-      return response;
-    } catch (err: any) {
-      // #region debug log - fetch error
-      log('Fetch error', { url, error: err?.message });
-      // #endregion
-      throw err;
-    }
-  };
-
   const generateOpeningMessage = async () => {
     if (!userData) return;
 
@@ -245,7 +208,7 @@ export default function EquiDashboard() {
         preferredAgentPersona,
       }));
 
-      const response = await debugFetch(`/api/synthesis?userData=${userDataParam}`);
+      const response = await fetch(`/api/synthesis?userData=${userDataParam}`);
       const data = await response.json();
       
       const openingMessage: Message = {
@@ -297,7 +260,7 @@ export default function EquiDashboard() {
     };
 
     try {
-      const response = await debugFetch("/api/synthesis", {
+      const response = await fetch("/api/synthesis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -349,18 +312,12 @@ export default function EquiDashboard() {
   // ============================================================================
   // RENDER
   // ============================================================================
-  // #region debug log - entering render
-  log('Entering render', { isLoading, hasError: !!error, hasUserData: !!userData });
-  // #endregion
 
   if (isLoading) {
     return <DashboardSkeleton />;
   }
 
   if (error) {
-    // #region debug log - error display
-    log('Showing error display', { error, timestamp: Date.now() });
-    // #endregion
     return <ErrorDisplay message={error} onRetry={() => { setError(null); setIsLoading(true); initializeDashboard(); }} />;
   }
 
@@ -494,7 +451,7 @@ export default function EquiDashboard() {
     };
 
     try {
-      const response = await debugFetch("/api/synthesis", {
+      const response = await fetch("/api/synthesis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
