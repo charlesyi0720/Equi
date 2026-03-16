@@ -112,7 +112,7 @@ export default function LoginPage() {
         if (signUpError) {
           setError(signUpError);
         } else if (user) {
-          router.push("/equi/onboarding");
+          window.location.href = "/equi/onboarding";
         }
       } else {
         const { user, error: signInError } = await signIn(email, password);

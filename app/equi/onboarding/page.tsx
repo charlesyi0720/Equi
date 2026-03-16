@@ -119,7 +119,7 @@ export default function EquiOnboarding() {
             console.log('[ONBOARDING] Profile check:', { completed, profile });
             if (completed) {
               console.log('[ONBOARDING] Redirecting to dashboard (session path)');
-              router.push("/equi/dashboard");
+              window.location.href = "/equi/dashboard";
               return;
             }
             setIsLoading(false);
@@ -149,7 +149,7 @@ export default function EquiOnboarding() {
 
       if (completed) {
         console.log('[ONBOARDING] Redirecting to dashboard (profile path)');
-        router.push("/equi/dashboard");
+        window.location.href = "/equi/dashboard";
         return;
       }
 
@@ -480,7 +480,7 @@ export default function EquiOnboarding() {
           
           if (!user) {
             // Not authenticated - redirect to signup
-            router.push("/equi/login?mode=signup");
+            window.location.href = "/equi/login?mode=signup";
             return;
           }
           
