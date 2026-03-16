@@ -5,6 +5,7 @@ import { signIn, signUp, getSession, onAuthStateChange, getProfile } from "../li
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
+  // Test comment for Vercel redeploy
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
