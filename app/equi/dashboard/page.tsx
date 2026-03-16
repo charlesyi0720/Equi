@@ -5,6 +5,45 @@ import { EquiUser } from "../types";
 import { supabase } from "../lib/supabase";
 import { onAuthStateChange, signOut } from "../lib/auth";
 
+// Error Boundary Component
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("[ERROR BOUNDARY] Caught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <div className="text-lg text-red-600">Something went wrong</div>
+            <div className="text-sm text-slate-500">{this.state.error?.message}</div>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-slate-900 text-white rounded"
+            >
+              Reload Page
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -79,7 +118,7 @@ function ErrorDisplay({ message, onRetry }: { message: string; onRetry: () => vo
 // DASHBOARD COMPONENT
 // ============================================================================
 
-export default function EquiDashboard() {
+function DashboardContent() {
   const [userData, setUserData] = useState<EquiUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -739,4 +778,13 @@ export default function EquiDashboard() {
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 11);
+}
+
+// Wrapper component with Error Boundary
+export default function EquiDashboard() {
+  return (
+    <ErrorBoundary>
+      <DashboardContent />
+    </ErrorBoundary>
+  );
 }
