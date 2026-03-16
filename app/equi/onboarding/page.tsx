@@ -192,6 +192,8 @@ function OnboardingContent() {
         return;
       }
 
+      console.log('[ONBOARDING] Showing onboarding form');
+
       setIsLoading(false);
       console.log('[ONBOARDING] Onboarding not completed, showing form');
     };
