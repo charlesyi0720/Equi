@@ -367,12 +367,12 @@ function DashboardContent() {
 
   // Auto-scroll to current time on mount - must be BEFORE early returns
   useEffect(() => {
-    if (!Number.isFinite(currentTimeTop)) return;
-    const targetScroll = Math.max(0, currentTimeTop - 150); // 150px above current time
+    // Default to 8:30 AM view (similar to Google Calendar)
+    // 8.5 hours * 64px + 44px header = 588px, offset a bit for better view
     if (calendarScrollRef.current) {
-      calendarScrollRef.current.scrollTop = targetScroll;
+      calendarScrollRef.current.scrollTop = 500;
     }
-  }, [currentTimeTop]);
+  }, []); // Only run once on mount
 
   if (isLoading) {
     return <DashboardSkeleton />;
@@ -682,10 +682,10 @@ function DashboardContent() {
               </div>
             </div>
 
-            <div ref={calendarScrollRef} className="overflow-y-auto" style={{ height: "calc(100vh - 180px)" }}>
-              <div className="min-w-[900px]">
+            <div ref={calendarScrollRef} className="overflow-x-auto overflow-y-auto" style={{ height: "calc(100vh - 180px)" }}>
+              <div className="w-full min-w-[700px]">
                 <div
-                  className="grid"
+                  className="grid relative"
                   style={{
                     gridTemplateColumns: "64px repeat(7, minmax(0, 1fr))",
                     gridTemplateRows: `44px repeat(${hours.length}, ${hourRowHeight}px)`,
