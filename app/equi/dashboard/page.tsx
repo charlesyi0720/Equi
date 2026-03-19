@@ -300,7 +300,9 @@ function DashboardContent() {
         preferredAgentPersona,
       }));
 
-      const response = await fetch(`/api/synthesis?userData=${userDataParam}`);
+      const response = await fetch(`/api/synthesis?userData=${userDataParam}`, {
+        credentials: "include",
+      });
       const data = await response.json();
       
       const openingMessage: Message = {
@@ -355,6 +357,7 @@ function DashboardContent() {
       const response = await fetch("/api/synthesis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           message: userMessage.content,
           conversationHistory,
@@ -553,6 +556,7 @@ function DashboardContent() {
       const response = await fetch("/api/synthesis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           message: userMessage.content,
           conversationHistory,

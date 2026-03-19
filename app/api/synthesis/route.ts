@@ -11,8 +11,21 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "../../equi/lib/supabase";
 import { geminiConfig } from "../../equi/lib/gemini";
+
+// #region agent log
+const LOG_ENDPOINT = "http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228";
+const SESSION_ID = "089970";
+function log(payload: Record<string, unknown>) {
+  fetch(LOG_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": SESSION_ID },
+    body: JSON.stringify({ ...payload, sessionId: SESSION_ID, timestamp: Date.now() }),
+  }).catch(() => {});
+}
+// #endregion
 
 // ---------------------------------------------------------------------------
 // Types
@@ -178,25 +191,69 @@ async function retrieveKnowledge(
 
 async function authUserId(req: NextRequest): Promise<{ userId: string } | NextResponse> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!supabaseUrl || !supabaseKey) {
+  log({
+    location: "authUserId:entry",
+    message: "Starting auth flow",
+    data: { hasUrl: !!supabaseUrl, hasKey: !!supabaseServiceKey, env: process.env.NODE_ENV },
+    hypothesisId: "A",
+    runId: "pre-fix",
+  });
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    log({ location: "authUserId:env", message: "Missing env vars", data: {}, hypothesisId: "A", runId: "pre-fix" });
     return NextResponse.json(
       { error: "Supabase environment not configured" },
       { status: 500 }
     );
   }
 
-  const cookie = req.headers.get("cookie") ?? "";
-  const sbTokenMatch = cookie.match(/sb-access-token=([^;]+)/);
-  const sbToken = sbTokenMatch?.[1];
+  // Build a cookie-aware Supabase client that reads the session from request headers.
+  // Supabase JS v2 uses the cookie getter to locate the auth token automatically.
+  const cookieHeader = req.headers.get("cookie") ?? "";
+  log({
+    location: "authUserId:cookie",
+    message: "Cookie header received",
+    data: {
+      rawLength: cookieHeader.length,
+      hasSbToken: cookieHeader.includes("sb-"),
+      cookieNames: cookieHeader.split(";").map((c) => c.trim().split("=")[0]).filter(Boolean),
+    },
+    hypothesisId: "B",
+    runId: "pre-fix",
+  });
 
-  if (!sbToken) {
-    return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
-  }
+  const cookieClient = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      cookies: {
+        get: (name: string) => {
+          const match = cookieHeader.match(new RegExp(`(^|;\\s*)${name}=([^;]+)`));
+          return match ? decodeURIComponent(match[2]) : undefined;
+        },
+        // Required by the interface signature even though we only read here
+        set: () => {},
+        remove: () => {},
+      },
+    },
+  });
 
-  // Verify the JWT with Supabase admin client
-  const { data: user, error } = await supabaseAdmin!.auth.getUser(sbToken);
+  const { data: user, error } = await cookieClient.auth.getUser();
+
+  log({
+    location: "authUserId:getUser",
+    message: "getUser result",
+    data: {
+      hasUser: !!user?.user,
+      userId: user?.user?.id ?? null,
+      errorMessage: error?.message ?? null,
+      errorStatus: error?.status ?? null,
+    },
+    hypothesisId: "C",
+    runId: "pre-fix",
+  });
 
   if (error || !user?.user) {
     return NextResponse.json({ error: "Invalid token" }, { status: 401 });
