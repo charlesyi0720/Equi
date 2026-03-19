@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { createRouteHandlerClient } from "@supabase/ssr";
+import { createServerClient } from "@supabase/ssr";
 import { supabaseAdmin } from "../../equi/lib/supabase";
 import { geminiConfig } from "../../equi/lib/gemini";
 
@@ -222,11 +222,26 @@ async function authUserId(req: NextRequest): Promise<{ userId: string } | NextRe
     runId: "pre-fix",
   });
 
-  // createRouteHandlerClient is the official @supabase/ssr client for Next.js API routes.
-  // It reads auth cookies from the request headers automatically.
-  const supabase = createRouteHandlerClient(
-    { cookies: { get: (name) => cookieHeader.match(new RegExp(`(^|;\\s*)${name}=([^;]+)`))?.[2] ?? undefined } },
-    { supabaseUrl, supabaseKey: supabaseServiceKey }
+  // createServerClient is the official @supabase/ssr client for Next.js API routes.
+  // v0.9 uses cookies.getAll() → returns { name, value }[] (synchronous, no Promises needed).
+  const supabase = createServerClient(
+    supabaseUrl,
+    supabaseServiceKey,
+    {
+      auth: { autoRefreshToken: false, persistSession: false },
+      cookies: {
+        getAll: () =>
+          cookieHeader
+            ? cookieHeader.split(";").map((pair) => {
+                const eqIdx = pair.indexOf("=");
+                return {
+                  name: pair.slice(0, eqIdx).trim(),
+                  value: pair.slice(eqIdx + 1).trim(),
+                };
+              })
+            : [],
+      },
+    }
   );
 
   const { data: { user }, error } = await supabase.auth.getUser();
