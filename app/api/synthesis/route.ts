@@ -1,235 +1,402 @@
 /**
- * Synthesis API Route
- * Uses Gemini 2.0 Pro for conversational AI assistant.
- * Receives user question + Supabase profile data, returns streaming response.
+ * Synthesis API Route — RAG-enabled Conversational AI
+ *
+ * Data flow per POST /api/synthesis:
+ *   Step A: Embed user message → Gemini text-embedding-004 (768-dim)
+ *   Step B: Semantic search   → Supabase RPC match_equi_knowledge (top-3)
+ *   Step C: Inject knowledge  → Enhanced system prompt → Gemini generateContent
+ *
+ * Auth: requires valid Supabase JWT; userId is extracted from the verified token.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { geminiConfig, buildSystemPrompt } from "../../equi/lib/gemini";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { supabaseAdmin } from "../../equi/lib/supabase";
+import { geminiConfig } from "../../equi/lib/gemini";
 
-export interface SynthesisRequest {
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface SynthesisMessage {
+  role: "user" | "model";
+  content: string;
+}
+
+interface SynthesisBody {
   message: string;
-  conversationHistory: Array<{ role: "user" | "model"; content: string }>;
-  userData: {
+  conversationHistory?: SynthesisMessage[];
+  userData?: {
     mbti?: string;
     name?: string;
-    focusPeaks?: Array<{ weekday: string; start: { hour: number; minute?: number }; end: { hour: number; minute?: number } }>;
-    energyDips?: Array<{ weekday: string; start: { hour: number; minute?: number }; end: { hour: number; minute?: number } }>;
+    focusPeaks?: Array<{
+      weekday: string;
+      start: { hour: number; minute?: number };
+      end: { hour: number; minute?: number };
+    }>;
+    energyDips?: Array<{
+      weekday: string;
+      start: { hour: number; minute?: number };
+      end: { hour: number; minute?: number };
+    }>;
     todaySchedule?: string;
     preferredAgentPersona?: string;
   };
 }
 
-export async function POST(request: NextRequest) {
+interface MatchedKnowledge {
+  content: string;
+  metadata: Record<string, unknown>;
+  similarity: number;
+}
+
+const EMBEDDING_MODEL = "text-embedding-004";
+const MAX_HISTORY = 10;   // keep last 10 turns for context
+const MATCH_COUNT = 3;   // top-K knowledge chunks to retrieve
+
+// ---------------------------------------------------------------------------
+// System Prompt Templates
+// ---------------------------------------------------------------------------
+
+const TONE_INSTRUCTIONS = `
+
+【语气要求】
+- 当你引用用户的"精力低谷"或"MBTI 特质"进行建议时，请使用鼓励性且专业的语气。
+- 遇到挑战时，以建设性方案为导向，避免批评或施压。
+`;
+
+const SCHEDULE_UPDATE_MARKER =
+  "💡 [SCHEDULE_UPDATE]";
+
+const SCHEDULE_INSTRUCTIONS = `
+
+【日程建议输出规范】
+- 当你建议修改用户日程时，请在相关建议句末附加标记：${SCHEDULE_UPDATE_MARKER}
+- 前端会识别此标记并高亮显示日程建议区域。请勿在其他类型的回复中添加此标记。
+`;
+
+function buildRagContext(matches: MatchedKnowledge[]): string {
+  if (!matches.length) return "";
+
+  const blocks = matches.map((m, i) => {
+    const tag = (m.metadata?.chunk_type as string) ?? `块${i + 1}`;
+    return `[${tag}] ${m.content}`;
+  });
+
+  return (
+    "\n\n【用户背景知识】\n" +
+    blocks.join("\n\n") +
+    "\n\n请基于以上背景知识回答用户提问。如知识块与问题无关，仅作参考依据而非限制。"
+  );
+}
+
+function buildSystemPrompt(
+  userData: SynthesisBody["userData"],
+  ragContext: string
+): string {
+  const { mbti, focusPeaks, energyDips, todaySchedule, preferredAgentPersona } =
+    userData ?? {};
+
+  const personaIntro =
+    preferredAgentPersona === "DevotedSecretary"
+      ? "你是一位温暖鼓励型的私人 AI 生活架构师，擅长以同理心陪伴用户制定计划。"
+      : preferredAgentPersona === "HardSupervisor"
+      ? "你是一位简洁有力的 AI 督导型生活架构师，注重效率与成果交付。"
+      : "你是一位专业且贴心的 AI 生活架构师。";
+
+  const mbtiLine = mbti
+    ? `用户 MBTI 类型为 ${mbti}，可据此调整表达风格与建议方式。`
+    : "";
+
+  const focusLine = focusPeaks?.length
+    ? `用户在以下时段精力最充沛：${focusPeaks.map((p) => `${p.weekday} ${p.start.hour}:00–${p.end.hour}:00`).join("、")}。`
+    : "";
+
+  const dipLine = energyDips?.length
+    ? `用户在以下时段精力较低：${energyDips.map((d) => `${d.weekday} ${d.start.hour}:00–${d.end.hour}:00`).join("、")}。`
+    : "";
+
+  const scheduleLine = todaySchedule
+    ? `今日日程摘要：${todaySchedule}`
+    : "";
+
+  return [
+    personaIntro,
+    mbtiLine,
+    focusLine,
+    dipLine,
+    scheduleLine,
+    TONE_INSTRUCTIONS,
+    SCHEDULE_INSTRUCTIONS,
+    ragContext,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Step A: Embed user message with Gemini text-embedding-004
+// ---------------------------------------------------------------------------
+
+async function embedMessage(message: string): Promise<number[]> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: EMBEDDING_MODEL });
+  const result = await model.embedContent(message);
+  return result.embedding.values as number[];
+}
+
+// ---------------------------------------------------------------------------
+// Step B: Retrieve top-K knowledge chunks from Supabase
+// ---------------------------------------------------------------------------
+
+async function retrieveKnowledge(
+  queryEmbedding: number[],
+  userId: string
+): Promise<MatchedKnowledge[]> {
+  if (!supabaseAdmin) throw new Error("supabaseAdmin is not initialised");
+
+  const { data, error } = await supabaseAdmin.rpc("match_equi_knowledge", {
+    query_embedding: queryEmbedding,
+    p_user_id: userId,
+    p_match_count: MATCH_COUNT,
+  });
+
+  if (error) {
+    console.error("[synthesis] RPC match_equi_knowledge error:", error);
+    return []; // degrade gracefully — RAG failure shouldn't block chat
+  }
+
+  return (data as MatchedKnowledge[]) ?? [];
+}
+
+// ---------------------------------------------------------------------------
+// Auth helper — extract & verify userId from Supabase JWT cookie
+// ---------------------------------------------------------------------------
+
+async function authUserId(req: NextRequest): Promise<{ userId: string } | NextResponse> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    return NextResponse.json(
+      { error: "Supabase environment not configured" },
+      { status: 500 }
+    );
+  }
+
+  const cookie = req.headers.get("cookie") ?? "";
+  const sbTokenMatch = cookie.match(/sb-access-token=([^;]+)/);
+  const sbToken = sbTokenMatch?.[1];
+
+  if (!sbToken) {
+    return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  }
+
+  // Verify the JWT with Supabase admin client
+  const { data: user, error } = await supabaseAdmin.auth.getUser(sbToken);
+
+  if (error || !user?.user) {
+    return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+  }
+
+  return { userId: user.user.id };
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/synthesis — opening message (unchanged behaviour)
+// ---------------------------------------------------------------------------
+
+export async function GET(req: NextRequest) {
+  const searchParams = req.nextUrl.searchParams;
+  const userDataParam = searchParams.get("userData");
+
+  if (!userDataParam) {
+    return NextResponse.json({ error: "userData is required" }, { status: 400 });
+  }
+
+  let userData: SynthesisBody["userData"];
   try {
-    const body: SynthesisRequest = await request.json();
-    const { message, conversationHistory, userData } = body;
+    userData = JSON.parse(decodeURIComponent(userDataParam));
+  } catch {
+    return NextResponse.json({ error: "Invalid userData format" }, { status: 400 });
+  }
 
-    if (!message) {
-      return NextResponse.json(
-        { error: "Message is required" },
-        { status: 400 }
-      );
-    }
+  const { name } = userData ?? {};
 
-    // Build system prompt with user data
-    const systemPrompt = buildSystemPrompt({
-      mbti: userData?.mbti,
-      focusPeaks: userData?.focusPeaks,
-      energyDips: userData?.energyDips,
-      todaySchedule: userData?.todaySchedule,
-    });
+  const systemPrompt = buildSystemPrompt(userData, "");
+  const openingText = `${name || "你"}，你好。我是 Equi，你的个人 AI 生活架构师。`;
 
-    // Format conversation history
-    const historyParts = conversationHistory?.slice(-10).map((msg) => ({
-      role: msg.role,
-      parts: [{ text: msg.content }],
-    })) || [];
-
-    // Build request to Gemini API
-    const requestBody = {
+  const response = await fetch(geminiConfig.getUrl(), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
       systemInstruction: {
         role: "system",
-        parts: [{ text: systemPrompt }],
+        parts: [
+          {
+            text:
+              systemPrompt +
+              "\n\n请用 1-2 句话作为开场白，语气根据人格设定调整（DevotedSecretary 要温暖鼓励，HardSupervisor 要简洁有力）。",
+          },
+        ],
       },
-      contents: [
-        ...historyParts,
-        {
-          role: "user",
-          parts: [{ text: message }],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 1024,
-        topP: 0.95,
-        topK: 40,
-        stream: true,
-      },
-    };
+      contents: [{ role: "user", parts: [{ text: openingText }] }],
+      generationConfig: { temperature: 0.7, maxOutputTokens: 100, topP: 0.95, topK: 40 },
+    }),
+  });
 
-    // Call Gemini API with streaming
-    const response = await fetch(geminiConfig.getUrl(), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-    });
+  if (!response.ok) {
+    const errorText = await response.text();
+    return NextResponse.json({ error: "Gemini API failed", details: errorText }, { status: 500 });
+  }
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Gemini API error:", response.status, errorText);
-      return NextResponse.json(
-        { error: "Gemini API failed", details: errorText },
-        { status: 500 }
-      );
-    }
+  const result = await response.json();
+  const text =
+    result.candidates?.[0]?.content?.parts?.[0]?.text ||
+    "让我帮你优化今天的时间安排。";
 
-    // Create a streaming response
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      async start(controller) {
-        const reader = response.body?.getReader();
-        if (!reader) {
-          controller.close();
-          return;
-        }
+  return NextResponse.json({ openingMessage: text });
+}
 
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+// ---------------------------------------------------------------------------
+// POST /api/synthesis — RAG chat
+// ---------------------------------------------------------------------------
 
-            // Decode and parse the stream data
-            const chunk = new TextDecoder().decode(value);
-            const lines = chunk.split("\n").filter((line) => line.trim() !== "");
+export async function POST(req: NextRequest) {
+  // 1. Authenticate
+  const authResult = await authUserId(req);
+  if (authResult instanceof NextResponse) return authResult;
+  const { userId } = authResult;
 
-            for (const line of lines) {
-              if (line.startsWith("data: ")) {
-                const data = line.slice(6);
-                if (data === "[DONE]") {
-                  controller.close();
-                  return;
+  // 2. Parse body
+  let body: SynthesisBody;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const { message, conversationHistory, userData } = body;
+
+  if (!message || typeof message !== "string") {
+    return NextResponse.json({ error: "message is required" }, { status: 400 });
+  }
+
+  // 3. Step A — embed user message
+  let queryEmbedding: number[];
+  try {
+    queryEmbedding = await embedMessage(message);
+  } catch (err) {
+    console.error("[synthesis] Step A embed failed:", err);
+    return NextResponse.json(
+      { error: "Failed to embed message" },
+      { status: 502 }
+    );
+  }
+
+  // 4. Step B — retrieve knowledge (degrades gracefully on failure)
+  let matchedKnowledge: MatchedKnowledge[] = [];
+  try {
+    matchedKnowledge = await retrieveKnowledge(queryEmbedding, userId);
+  } catch (err) {
+    console.warn("[synthesis] Step B retrieval failed, continuing without RAG:", err);
+  }
+
+  // 5. Step C — build enhanced system prompt
+  const ragContext = buildRagContext(matchedKnowledge);
+  const systemPrompt = buildSystemPrompt(userData, ragContext);
+
+  // 6. Format conversation history (last MAX_HISTORY turns)
+  const historyParts = (conversationHistory ?? [])
+    .slice(-MAX_HISTORY)
+    .map((msg) => ({ role: msg.role, parts: [{ text: msg.content }] }));
+
+  // 7. Build Gemini generateContent request
+  const requestBody = {
+    systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
+    contents: [
+      ...historyParts,
+      { role: "user", parts: [{ text: message }] },
+    ],
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 1024,
+      topP: 0.95,
+      topK: 40,
+      stream: true,
+    },
+  };
+
+  // 8. Call Gemini with streaming
+  const response = await fetch(geminiConfig.getUrl(), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("[synthesis] Gemini API error:", response.status, errorText);
+    return NextResponse.json(
+      { error: "Gemini API failed", details: errorText },
+      { status: 502 }
+    );
+  }
+
+  // 9. Stream Gemini SSE response to client
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const reader = response.body?.getReader();
+      if (!reader) {
+        controller.close();
+        return;
+      }
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = new TextDecoder().decode(value);
+          const lines = chunk.split("\n").filter((l) => l.trim() !== "");
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const data = line.slice(6);
+              if (data === "[DONE]") {
+                controller.close();
+                return;
+              }
+
+              try {
+                const parsed = JSON.parse(data);
+                const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (text) {
+                  controller.enqueue(encoder.encode(text));
                 }
-
-                try {
-                  const parsed = JSON.parse(data);
-                  const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
-                  if (text) {
-                    controller.enqueue(encoder.encode(text));
-                  }
-                } catch (e) {
-                  // Skip invalid JSON lines
-                }
+              } catch {
+                // skip malformed SSE lines
               }
             }
           }
-        } catch (e) {
-          console.error("Stream error:", e);
-        } finally {
-          controller.close();
         }
-      },
-    });
+      } catch (e) {
+        console.error("[synthesis] stream read error:", e);
+      } finally {
+        controller.close();
+      }
+    },
+  });
 
-    return new NextResponse(stream, {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Transfer-Encoding": "chunked",
-      },
-    });
-  } catch (error) {
-    console.error("Synthesis API error:", error);
-    return NextResponse.json(
-      { error: "Failed to process request" },
-      { status: 500 }
-    );
-  }
-}
-
-/**
- * Generate opening message (proactive insight)
- */
-export async function GET(request: NextRequest) {
-  try {
-    const searchParams = request.nextUrl.searchParams;
-    const userDataParam = searchParams.get("userData");
-    
-    if (!userDataParam) {
-      return NextResponse.json(
-        { error: "userData is required" },
-        { status: 400 }
-      );
-    }
-
-    let userData;
-    try {
-      userData = JSON.parse(decodeURIComponent(userDataParam));
-    } catch {
-      return NextResponse.json(
-        { error: "Invalid userData format" },
-        { status: 400 }
-      );
-    }
-
-    const { name, mbti, focusPeaks, energyDips, preferredAgentPersona } = userData;
-
-    // Build opening message prompt
-    const systemPrompt = buildSystemPrompt({
-      mbti,
-      focusPeaks,
-      energyDips,
-    });
-
-    const openingMessage = `${name || "用户"}，你好。我是 Equi，你的个人 AI 生活架构师。`;
-
-    // Build request to Gemini API
-    const requestBody = {
-      systemInstruction: {
-        role: "system",
-        parts: [{ text: systemPrompt + "\n\n请用 1-2 句话作为开场白，语气根据人格设定调整（DevotedSecretary 要温暖鼓励，HardSupervisor 要简洁有力）。" }],
-      },
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: openingMessage }],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 100,
-        topP: 0.95,
-        topK: 40,
-      },
-    };
-
-    const response = await fetch(geminiConfig.getUrl(), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Gemini API error:", response.status, errorText);
-      return NextResponse.json(
-        { error: "Gemini API failed", details: errorText },
-        { status: 500 }
-      );
-    }
-
-    const result = await response.json();
-    const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "让我帮你优化今天的时间安排。";
-
-    return NextResponse.json({ openingMessage: text });
-  } catch (error) {
-    console.error("Opening message API error:", error);
-    return NextResponse.json(
-      { error: "Failed to generate opening message" },
-      { status: 500 }
-    );
-  }
+  return new NextResponse(stream, {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Transfer-Encoding": "chunked",
+    },
+  });
 }
