@@ -3,7 +3,7 @@
  * Shared utilities for Gemini integration
  */
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "AIzaSyDxrlkrGepqu5qxCTAtvQ5fikWDcevUSi0";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? "AIzaSyDxrlkrGepqu5qxCTAtvQ5fikWDcevUSi0";
 const GEMINI_MODEL = "gemini-2.0-pro-exp-02-05";
 
 export const geminiConfig = {
