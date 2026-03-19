@@ -2,7 +2,7 @@
  * POST /api/embed
  *
  * Embeds an array of natural-language chunks into Supabase pgvector via
- * Gemini text-embedding-004, then upserts them into the equi_knowledge table.
+ * Gemini gemini-embedding-001, then upserts them into the equi_knowledge table.
  * Use the helper in @/app/equi/lib/embedUser to embed a full EquiUser in one call.
  *
  * Table contract (confirmed via probing):
@@ -17,7 +17,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabaseAdmin } from "../../equi/lib/supabase";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const EMBEDDING_MODEL = "text-embedding-004";
+const EMBEDDING_MODEL = "gemini-embedding-001";
 
 // Chunk-type labels used in metadata, aligned with semanticParser chunk order
 const CHUNK_TYPE_LABELS = [
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 4. Parallel embedding via Gemini text-embedding-004
+  // 4. Parallel embedding via Gemini gemini-embedding-001
   let embeddingResults: number[][];
   try {
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);

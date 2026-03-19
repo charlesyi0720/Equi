@@ -2,7 +2,7 @@
  * Synthesis API Route — RAG-enabled Conversational AI
  *
  * Data flow per POST /api/synthesis:
- *   Step A: Embed user message → Gemini text-embedding-004 (768-dim)
+ *   Step A: Embed user message → Gemini gemini-embedding-001 (768-dim)
  *   Step B: Semantic search   → Supabase RPC match_equi_knowledge (top-3)
  *   Step C: Inject knowledge  → Enhanced system prompt → Gemini generateContent
  *
@@ -62,7 +62,7 @@ interface MatchedKnowledge {
   similarity: number;
 }
 
-const EMBEDDING_MODEL = "text-embedding-004";
+const EMBEDDING_MODEL = "gemini-embedding-001";
 const MAX_HISTORY = 10;   // keep last 10 turns for context
 const MATCH_COUNT = 3;   // top-K knowledge chunks to retrieve
 
@@ -147,7 +147,7 @@ function buildSystemPrompt(
 }
 
 // ---------------------------------------------------------------------------
-// Step A: Embed user message with Gemini text-embedding-004
+// Step A: Embed user message with Gemini gemini-embedding-001
 // ---------------------------------------------------------------------------
 
 async function embedMessage(message: string): Promise<number[]> {
