@@ -14,9 +14,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { supabaseAdmin } from "../../../equi/lib/supabase";
-import { generateUserContextChunks } from "../../../equi/lib/semanticParser";
-import { EquiUser } from "../../../equi/types";
+import { supabaseAdmin } from "../../equi/lib/supabase";
+import { generateUserContextChunks } from "../../equi/lib/semanticParser";
+import { EquiUser } from "../../equi/types";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const EMBEDDING_MODEL = "text-embedding-004";
