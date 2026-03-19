@@ -316,9 +316,10 @@ export async function POST(req: NextRequest) {
   try {
     queryEmbedding = await embedMessage(message);
   } catch (err) {
-    console.error("[synthesis] Step A embed failed:", err);
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error("[synthesis] Step A embed failed — full error:", err);
     return NextResponse.json(
-      { error: "Failed to embed message" },
+      { error: "Embed failed", details: detail },
       { status: 502 }
     );
   }
