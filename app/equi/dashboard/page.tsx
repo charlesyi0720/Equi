@@ -300,8 +300,9 @@ function DashboardContent() {
         preferredAgentPersona,
       }));
 
+      const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch(`/api/synthesis?userData=${userDataParam}`, {
-        credentials: "include",
+        headers: { Authorization: `Bearer ${session?.access_token ?? ""}` },
       });
       const data = await response.json();
       
@@ -354,10 +355,13 @@ function DashboardContent() {
     };
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch("/api/synthesis", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token ?? ""}`,
+        },
         body: JSON.stringify({
           message: userMessage.content,
           conversationHistory,
@@ -553,10 +557,13 @@ function DashboardContent() {
     };
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch("/api/synthesis", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token ?? ""}`,
+        },
         body: JSON.stringify({
           message: userMessage.content,
           conversationHistory,

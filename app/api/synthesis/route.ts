@@ -11,7 +11,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { createServerClient } from "@supabase/ssr";
 import { supabaseAdmin } from "../../equi/lib/supabase";
 import { geminiConfig } from "../../equi/lib/gemini";
 
@@ -186,75 +185,41 @@ async function retrieveKnowledge(
 }
 
 // ---------------------------------------------------------------------------
-// Auth helper — extract & verify userId from Supabase JWT cookie
+// Auth helper — verify userId from Bearer token in Authorization header
+// Uses supabaseAdmin.auth.getUser(token) with the raw JWT for server-side verification.
 // ---------------------------------------------------------------------------
 
 async function authUserId(req: NextRequest): Promise<{ userId: string } | NextResponse> {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  log({
-    location: "authUserId:entry",
-    message: "Starting auth flow",
-    data: { hasUrl: !!supabaseUrl, hasKey: !!supabaseServiceKey, env: process.env.NODE_ENV },
-    hypothesisId: "A",
-    runId: "pre-fix",
-  });
-
-  if (!supabaseUrl || !supabaseServiceKey) {
-    log({ location: "authUserId:env", message: "Missing env vars", data: {}, hypothesisId: "A", runId: "pre-fix" });
+  if (!supabaseAdmin) {
+    log({ location: "authUserId:env", message: "supabaseAdmin null", hypothesisId: "A", runId: "pre-fix" });
     return NextResponse.json(
       { error: "Supabase environment not configured" },
       { status: 500 }
     );
   }
 
-  const cookieHeader = req.headers.get("cookie") ?? "";
+  const authHeader = req.headers.get("Authorization") ?? "";
   log({
-    location: "authUserId:cookie",
-    message: "Cookie header received",
-    data: {
-      rawLength: cookieHeader.length,
-      hasSbToken: cookieHeader.includes("sb-"),
-      cookieNames: cookieHeader.split(";").map((c) => c.trim().split("=")[0]).filter(Boolean),
-    },
-    hypothesisId: "B",
+    location: "authUserId:entry",
+    message: "Authorization header",
+    data: { hasAuth: authHeader.length > 0, scheme: authHeader.split(" ")[0] },
+    hypothesisId: "A",
     runId: "pre-fix",
   });
 
-  // createServerClient is the official @supabase/ssr client for Next.js API routes.
-  // v0.9 uses cookies.getAll() → returns { name, value }[] (synchronous, no Promises needed).
-  const supabase = createServerClient(
-    supabaseUrl,
-    supabaseServiceKey,
-    {
-      auth: { autoRefreshToken: false, persistSession: false },
-      cookies: {
-        getAll: () =>
-          cookieHeader
-            ? cookieHeader.split(";").map((pair) => {
-                const eqIdx = pair.indexOf("=");
-                return {
-                  name: pair.slice(0, eqIdx).trim(),
-                  value: pair.slice(eqIdx + 1).trim(),
-                };
-              })
-            : [],
-      },
-    }
-  );
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
-  const { data: { user }, error } = await supabase.auth.getUser();
+  if (!token) {
+    return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  }
+
+  // getUser(token) verifies the JWT against Supabase Auth server-side
+  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
 
   log({
     location: "authUserId:getUser",
     message: "getUser result",
-    data: {
-      hasUser: !!user,
-      userId: user?.id ?? null,
-      errorMessage: error?.message ?? null,
-      errorStatus: error?.status ?? null,
-    },
+    data: { hasUser: !!user, userId: user?.id ?? null, errorMessage: error?.message ?? null, errorStatus: error?.status ?? null },
     hypothesisId: "C",
     runId: "pre-fix",
   });
