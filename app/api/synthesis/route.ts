@@ -353,12 +353,11 @@ export async function POST(req: NextRequest) {
       maxOutputTokens: 1024,
       topP: 0.95,
       topK: 40,
-      stream: true,
     },
   };
 
   // 8. Call Gemini with streaming
-  const response = await fetch(geminiConfig.getUrl(), {
+  const response = await fetch(geminiConfig.getStreamUrl(), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(requestBody),

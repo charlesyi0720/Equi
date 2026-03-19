@@ -13,6 +13,8 @@ export const geminiConfig = {
   
   // Build full URL with API key
   getUrl: () => `${geminiConfig.baseUrl}?key=${GEMINI_API_KEY}`,
+  getStreamUrl: () =>
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContentStream?key=${GEMINI_API_KEY}`,
 };
 
 /**
