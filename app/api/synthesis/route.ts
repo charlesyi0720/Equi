@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { createClient } from "@supabase/supabase-js";
+import { createRouteHandlerClient } from "@supabase/ssr";
 import { supabaseAdmin } from "../../equi/lib/supabase";
 import { geminiConfig } from "../../equi/lib/gemini";
 
@@ -209,8 +209,6 @@ async function authUserId(req: NextRequest): Promise<{ userId: string } | NextRe
     );
   }
 
-  // Build a cookie-aware Supabase client that reads the session from request headers.
-  // Supabase JS v2 uses the cookie getter to locate the auth token automatically.
   const cookieHeader = req.headers.get("cookie") ?? "";
   log({
     location: "authUserId:cookie",
@@ -224,30 +222,21 @@ async function authUserId(req: NextRequest): Promise<{ userId: string } | NextRe
     runId: "pre-fix",
   });
 
-  const cookieClient = createClient(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-      cookies: {
-        get: (name: string) => {
-          const match = cookieHeader.match(new RegExp(`(^|;\\s*)${name}=([^;]+)`));
-          return match ? decodeURIComponent(match[2]) : undefined;
-        },
-        // Required by the interface signature even though we only read here
-        set: () => {},
-        remove: () => {},
-      },
-    },
-  });
+  // createRouteHandlerClient is the official @supabase/ssr client for Next.js API routes.
+  // It reads auth cookies from the request headers automatically.
+  const supabase = createRouteHandlerClient(
+    { cookies: { get: (name) => cookieHeader.match(new RegExp(`(^|;\\s*)${name}=([^;]+)`))?.[2] ?? undefined } },
+    { supabaseUrl, supabaseKey: supabaseServiceKey }
+  );
 
-  const { data: user, error } = await cookieClient.auth.getUser();
+  const { data: { user }, error } = await supabase.auth.getUser();
 
   log({
     location: "authUserId:getUser",
     message: "getUser result",
     data: {
-      hasUser: !!user?.user,
-      userId: user?.user?.id ?? null,
+      hasUser: !!user,
+      userId: user?.id ?? null,
       errorMessage: error?.message ?? null,
       errorStatus: error?.status ?? null,
     },
@@ -255,11 +244,11 @@ async function authUserId(req: NextRequest): Promise<{ userId: string } | NextRe
     runId: "pre-fix",
   });
 
-  if (error || !user?.user) {
+  if (error || !user) {
     return NextResponse.json({ error: "Invalid token" }, { status: 401 });
   }
 
-  return { userId: user.user.id };
+  return { userId: user.id };
 }
 
 // ---------------------------------------------------------------------------
