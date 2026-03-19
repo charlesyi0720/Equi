@@ -1,9 +1,9 @@
 /**
  * POST /api/embed
  *
- * Embeds an array of natural-language chunks (from generateUserContextChunks)
- * into Supabase pgvector via Gemini text-embedding-004, then upserts them into
- * the equi_knowledge table.
+ * Embeds an array of natural-language chunks into Supabase pgvector via
+ * Gemini text-embedding-004, then upserts them into the equi_knowledge table.
+ * Use the helper in @/app/equi/lib/embedUser to embed a full EquiUser in one call.
  *
  * Table contract (confirmed via probing):
  *   user_id   UUID     NOT NULL REFERENCES auth.users(id)
@@ -15,8 +15,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabaseAdmin } from "../../equi/lib/supabase";
-import { generateUserContextChunks } from "../../equi/lib/semanticParser";
-import { EquiUser } from "../../equi/types";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const EMBEDDING_MODEL = "text-embedding-004";
@@ -29,7 +27,6 @@ const CHUNK_TYPE_LABELS = [
   "fixed_activities",
   "life_mode_context",
 ] as const;
-type ChunkType = (typeof CHUNK_TYPE_LABELS)[number];
 
 // ---------------------------------------------------------------------------
 // GET /api/embed — health check
@@ -91,7 +88,7 @@ export async function POST(req: NextRequest) {
   let embeddingResults: number[][];
   try {
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const model = genAI.getEmbeddingModel(EMBEDDING_MODEL);
+    const model = genAI.getGenerativeModel({ model: EMBEDDING_MODEL });
 
     embeddingResults = await Promise.all(
       chunks.map(async (chunk) => {
@@ -160,27 +157,4 @@ export async function POST(req: NextRequest) {
     },
     { status: 201 }
   );
-}
-
-// ---------------------------------------------------------------------------
-// Convenience helper — embeds a full EquiUser in one call
-// ---------------------------------------------------------------------------
-
-/**
- * Shortcut: takes a complete EquiUser object, generates context chunks
- * and persists them. Use this from server-side route handlers or cron jobs.
- *
- * Usage:
- *   import { embedUser } from "@/app/equi/lib/embedUser";
- *   await embedUser(equiUser);
- */
-export async function embedUser(userData: EquiUser): Promise<{ ok: boolean; error?: string }> {
-  const chunks = generateUserContextChunks(userData);
-  const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000"}/api/embed`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId: userData.id, chunks }),
-  });
-  const json = await res.json();
-  return res.ok ? { ok: true } : { ok: false, error: json.error };
 }
