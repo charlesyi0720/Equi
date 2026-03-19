@@ -196,7 +196,7 @@ async function authUserId(req: NextRequest): Promise<{ userId: string } | NextRe
   }
 
   // Verify the JWT with Supabase admin client
-  const { data: user, error } = await supabaseAdmin.auth.getUser(sbToken);
+  const { data: user, error } = await supabaseAdmin!.auth.getUser(sbToken);
 
   if (error || !user?.user) {
     return NextResponse.json({ error: "Invalid token" }, { status: 401 });
