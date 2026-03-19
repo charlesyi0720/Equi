@@ -300,6 +300,7 @@ function DashboardContent() {
         preferredAgentPersona,
       }));
 
+      if (!supabase) return;
       const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch(`/api/synthesis?userData=${userDataParam}`, {
         headers: { Authorization: `Bearer ${session?.access_token ?? ""}` },
@@ -355,6 +356,7 @@ function DashboardContent() {
     };
 
     try {
+      if (!supabase) return;
       const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch("/api/synthesis", {
         method: "POST",
@@ -557,6 +559,7 @@ function DashboardContent() {
     };
 
     try {
+      if (!supabase) return;
       const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch("/api/synthesis", {
         method: "POST",
