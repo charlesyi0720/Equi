@@ -175,6 +175,14 @@ function DashboardContent() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [calendarEvents, setCalendarEvents] = useState<Array<{
+    id: string;
+    title: string;
+    dayIdx: number;
+    start: number;
+    end: number;
+    isFixed: boolean;
+  }>>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isMountedRef = useRef(true);
   const calendarScrollRef = useRef<HTMLDivElement>(null);
@@ -284,6 +292,49 @@ function DashboardContent() {
     if (userData && messages.length === 0) {
       generateOpeningMessage();
     }
+  }, [userData]);
+
+  // Populate calendarEvents from userData — deduped by slot ID so push on re-render never ghosts
+  useEffect(() => {
+    if (!userData) return;
+
+    const weekdayToShort: Record<string, string> = {
+      Monday: "Mon", Tuesday: "Tue", Wednesday: "Wed",
+      Thursday: "Thu", Friday: "Fri", Saturday: "Sat", Sunday: "Sun",
+    };
+
+    const events: Array<{
+      id: string; title: string; dayIdx: number; start: number; end: number; isFixed: boolean;
+    }> = [];
+
+    const seen = new Set<string>();
+    const fixedActivities = userData.lifeStructure?.fixedActivities || [];
+    for (const activity of Array.isArray(fixedActivities) ? fixedActivities : []) {
+      if (activity?.activityType === "strictlyFixed" && Array.isArray(activity?.slots)) {
+        for (const slot of activity.slots) {
+          if (slot?.day == null || slot?.startHour == null || slot?.endHour == null) continue;
+          const uid = `${slot.day}|${slot.startHour}|${slot.startMinute}|${slot.endHour}`;
+          if (seen.has(uid)) continue;
+          seen.add(uid);
+
+          const shortDay = weekdayToShort[slot.day] || slot.day;
+          const dayIdx = days.indexOf(shortDay as typeof days[number]);
+          if (dayIdx < 0) continue;
+
+          const start = (slot.startHour ?? 0) + ((slot.startMinute ?? 0) / 60);
+          const end   = (slot.endHour   ?? 0) + ((slot.endMinute   ?? 0) / 60);
+          if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+
+          events.push({ id: uid, title: activity.label || "Untitled", dayIdx, start, end, isFixed: true });
+        }
+      }
+    }
+
+    if (events.length === 0) {
+      events.push({ id: "placeholder-wed-deepwork", title: "Deep Work: Thesis", dayIdx: 2, start: 10, end: 13, isFixed: false });
+    }
+
+    setCalendarEvents(events);
   }, [userData]);
 
   const generateOpeningMessage = async () => {
@@ -469,58 +520,6 @@ function DashboardContent() {
   const startHour = 0;
   const endHour = 23;
   const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i);
-
-  const [calendarEvents, setCalendarEvents] = useState<Array<{
-    id: string;
-    title: string;
-    dayIdx: number;
-    start: number;
-    end: number;
-    isFixed: boolean;
-  }>>([]);
-
-  // Populate calendarEvents from userData — deduped by slot ID so push on re-render never ghosts
-  useEffect(() => {
-    if (!userData) return;
-
-    const weekdayToShort: Record<string, string> = {
-      Monday: "Mon", Tuesday: "Tue", Wednesday: "Wed",
-      Thursday: "Thu", Friday: "Fri", Saturday: "Sat", Sunday: "Sun",
-    };
-
-    const events: Array<{
-      id: string; title: string; dayIdx: number; start: number; end: number; isFixed: boolean;
-    }> = [];
-
-    const seen = new Set<string>();
-    const fixedActivities = userData.lifeStructure?.fixedActivities || [];
-    for (const activity of Array.isArray(fixedActivities) ? fixedActivities : []) {
-      if (activity?.activityType === "strictlyFixed" && Array.isArray(activity?.slots)) {
-        for (const slot of activity.slots) {
-          if (slot?.day == null || slot?.startHour == null || slot?.endHour == null) continue;
-          const uid = `${slot.day}|${slot.startHour}|${slot.startMinute}|${slot.endHour}`;
-          if (seen.has(uid)) continue;
-          seen.add(uid);
-
-          const shortDay = weekdayToShort[slot.day] || slot.day;
-          const dayIdx = days.indexOf(shortDay as typeof days[number]);
-          if (dayIdx < 0) continue;
-
-          const start = (slot.startHour ?? 0) + ((slot.startMinute ?? 0) / 60);
-          const end   = (slot.endHour   ?? 0) + ((slot.endMinute   ?? 0) / 60);
-          if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
-
-          events.push({ id: uid, title: activity.label || "Untitled", dayIdx, start, end, isFixed: true });
-        }
-      }
-    }
-
-    if (events.length === 0) {
-      events.push({ id: "placeholder-wed-deepwork", title: "Deep Work: Thesis", dayIdx: 2, start: 10, end: 13, isFixed: false });
-    }
-
-    setCalendarEvents(events);
-  }, [userData]);
 
   const hourLabel = (h: number) => {
     if (h === 0) return "12 AM";
