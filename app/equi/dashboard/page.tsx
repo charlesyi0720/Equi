@@ -937,7 +937,7 @@ function DashboardContent() {
                     }
                     const colStart = gridColForDayIdx(event.dayIdx);
                     const rowStart = gridRowForHour(Math.floor(event.start));
-                    const rowEnd = gridRowEndForHour(Math.round(event.end));
+                    const rowEnd = gridRowEndForHour(Math.floor(event.start)) + 1;
                     if (!Number.isFinite(colStart) || !Number.isFinite(rowStart) || !Number.isFinite(rowEnd)) {
                       return null;
                     }
@@ -952,8 +952,11 @@ function DashboardContent() {
                       style={{
                         gridColumnStart: colStart,
                         gridColumnEnd: colStart + 1,
-                        gridRowStart: rowStart,
-                        gridRowEnd: rowEnd,
+                        gridRowStart: Math.floor(event.start) + 2,
+                        gridRowEnd: Math.floor(event.start) + 3,
+                        marginTop: `${(event.start % 1) * hourRowHeight}px`,
+                        height: `${(event.end - event.start) * hourRowHeight}px`,
+                        position: "relative",
                       }}
                     >
                       <div className={`font-semibold line-clamp-2 leading-tight ${!event.isFixed ? "flex items-center gap-1.5 text-slate-800" : "text-slate-700"}`}>
