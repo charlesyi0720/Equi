@@ -33,12 +33,15 @@ export default function Home() {
         }
         
         // Step 4: Smart redirect based on DB status
+        // Use window.location.href (not router.push) to bypass Next.js App Router
+        // prefetch cache. This guarantees a fresh server request so the dashboard
+        // always sees the latest Supabase data for newly onboarded users.
         const completed = profile?.onboarding_completed === true;
-        
+
         if (completed) {
-          router.push("/equi/dashboard");
+          window.location.href = "/equi/dashboard";
         } else {
-          router.push("/equi/onboarding");
+          window.location.href = "/equi/onboarding";
         }
       } catch (err) {
         console.error("Error in redirect logic:", err);
