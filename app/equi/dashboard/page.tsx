@@ -560,6 +560,13 @@ function DashboardContent() {
   const focusPeakEnd = 13;
   const dipStart = 21;
 
+  let greetingTime = "Good evening";
+  if (currentHour < 12) {
+    greetingTime = "Good morning";
+  } else if (currentHour < 18) {
+    greetingTime = "Good afternoon";
+  }
+
   const submitQuickAction = async (text: string) => {
     if (!text.trim() || isStreaming) return;
 
@@ -667,7 +674,7 @@ function DashboardContent() {
               <SparkleIcon />
             </div>
             <div className="text-sm leading-relaxed text-slate-700">
-              <span className="font-semibold text-slate-900">Good morning, {name}.</span>{" "}
+              <span className="font-semibold text-slate-900">{greetingTime}, {name}.</span>{" "}
               Your focus peaks at 10 AM today. I&apos;ve optimized your deep-work blocks accordingly.
             </div>
           </div>
