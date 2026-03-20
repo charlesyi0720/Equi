@@ -498,7 +498,7 @@ function DashboardContent() {
 
   // Calendar time calculations - must be BEFORE early returns
   const headerHeight = 44;
-  const hourRowHeight = 64; // h-16 = 64px per hour
+  const hourRowHeight = 96; // h-24 = 96px per hour (50% more vertical space)
 
   // Get current time for the red line
   const now = new Date();
@@ -944,7 +944,7 @@ function DashboardContent() {
                     return (
                     <div
                       key={event.id}
-                      className={`z-10 mx-1 my-1 rounded-2xl px-3.5 py-2.5 text-xs text-slate-900 overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.12)] ${
+                      className={`z-10 mx-1 my-1 rounded-2xl px-2 py-1.5 text-xs text-slate-900 overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.12)] ${
                         event.isFixed
                           ? "border border-gray-200 bg-white"
                           : "border border-dashed border-gray-300 bg-white"
@@ -956,7 +956,7 @@ function DashboardContent() {
                         gridRowEnd: rowEnd,
                       }}
                     >
-                      <div className={`font-semibold ${!event.isFixed ? "flex items-center gap-1.5 text-slate-800" : "text-slate-700"}`}>
+                      <div className={`font-semibold line-clamp-2 leading-tight ${!event.isFixed ? "flex items-center gap-1.5 text-slate-800" : "text-slate-700"}`}>
                         {!event.isFixed && (
                           <span className="inline-flex items-center justify-center w-4 h-4 rounded-md bg-amber-50 text-amber-500 shrink-0" aria-hidden="true">
                             <SparkleIcon />
