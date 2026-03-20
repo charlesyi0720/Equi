@@ -386,30 +386,44 @@ async function handleRagChat(body: SynthesisBody, userId: string): Promise<NextR
       }
 
       try {
+        let buffer = "";
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const chunk = new TextDecoder().decode(value);
-          const lines = chunk.split("\n").filter((l) => l.trim() !== "");
+          buffer += new TextDecoder().decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || ""; // carry incomplete tail to next iteration
 
           for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const data = line.slice(6);
-              if (data === "[DONE]") {
-                controller.close();
-                return;
-              }
+            if (!line.startsWith("data: ")) continue;
+            const data = line.slice(6).trim();
+            if (data === "[DONE]") {
+              controller.close();
+              return;
+            }
 
-              try {
-                const parsed = JSON.parse(data);
-                const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
-                if (text) {
-                  controller.enqueue(encoder.encode(text));
-                }
-              } catch {
-                // skip malformed SSE lines
-              }
+            try {
+              const parsed = JSON.parse(data);
+              const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (text) controller.enqueue(encoder.encode(text));
+            } catch {
+              // skip malformed SSE lines
+            }
+          }
+        }
+
+        // flush any remaining buffer after stream ends
+        if (buffer.startsWith("data: ")) {
+          const data = buffer.slice(6).trim();
+          if (data !== "[DONE]") {
+            try {
+              const parsed = JSON.parse(data);
+              const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (text) controller.enqueue(encoder.encode(text));
+            } catch {
+              // ignore
             }
           }
         }
