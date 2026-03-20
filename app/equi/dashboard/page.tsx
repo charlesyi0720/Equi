@@ -345,6 +345,7 @@ function DashboardContent() {
     try {
       if (!supabase) return;
       const { data: { session } } = await supabase.auth.getSession();
+      const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const response = await fetch("/api/synthesis", {
         method: "POST",
         headers: {
@@ -353,6 +354,7 @@ function DashboardContent() {
         },
         body: JSON.stringify({
           isGreeting: true,
+          timezone: userTimezone,
           userData: {
             name,
             mbti,
@@ -407,14 +409,17 @@ function DashboardContent() {
     }));
 
     const userContext = {
+      name: userData?.understanding?.name,
       mbti: userData?.understanding?.mbti,
       focusPeaks: userData?.understanding?.biologicalClock?.focusPeaks,
       energyDips: userData?.understanding?.biologicalClock?.energyDips,
+      preferredAgentPersona: userData?.understanding?.preferredAgentPersona,
     };
 
     try {
       if (!supabase) return;
       const { data: { session } } = await supabase.auth.getSession();
+      const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const response = await fetch("/api/synthesis", {
         method: "POST",
         headers: {
@@ -424,6 +429,7 @@ function DashboardContent() {
         body: JSON.stringify({
           message: userMessage.content,
           conversationHistory,
+          timezone: userTimezone,
           userData: userContext,
         }),
       });
@@ -555,14 +561,17 @@ function DashboardContent() {
     }));
 
     const userContext = {
+      name: userData?.understanding?.name,
       mbti: userData?.understanding?.mbti,
       focusPeaks: userData?.understanding?.biologicalClock?.focusPeaks,
       energyDips: userData?.understanding?.biologicalClock?.energyDips,
+      preferredAgentPersona: userData?.understanding?.preferredAgentPersona,
     };
 
     try {
       if (!supabase) return;
       const { data: { session } } = await supabase.auth.getSession();
+      const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const response = await fetch("/api/synthesis", {
         method: "POST",
         headers: {
@@ -572,6 +581,7 @@ function DashboardContent() {
         body: JSON.stringify({
           message: userMessage.content,
           conversationHistory,
+          timezone: userTimezone,
           userData: userContext,
         }),
       });

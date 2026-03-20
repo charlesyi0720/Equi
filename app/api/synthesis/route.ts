@@ -38,6 +38,7 @@ interface SynthesisBody {
   isGreeting?: boolean;
   message?: string;
   conversationHistory?: SynthesisMessage[];
+  timezone?: string;
   userData?: {
     mbti?: string;
     name?: string;
@@ -105,10 +106,26 @@ function buildRagContext(matches: MatchedKnowledge[]): string {
 
 function buildSystemPrompt(
   userData: SynthesisBody["userData"],
-  ragContext: string
+  ragContext: string,
+  timezone: string
 ): string {
-  const { mbti, focusPeaks, energyDips, todaySchedule, preferredAgentPersona } =
+  const { mbti, name, focusPeaks, energyDips, todaySchedule, preferredAgentPersona } =
     userData ?? {};
+
+  const tz = timezone || "UTC";
+  const localTimeStr = new Date().toLocaleString("en-US", {
+    timeZone: tz,
+    dateStyle: "full",
+    timeStyle: "short",
+  });
+
+  const nameLine = name
+    ? `用户的名字是 ${name}。请始终以 ${name} 称呼用户，不要使用"Boss"等泛称（除非人格设定另有要求）。`
+    : "";
+
+  const personaInstruction = preferredAgentPersona
+    ? `你的人格和语气必须严格匹配以下设定：${preferredAgentPersona}。`
+    : "";
 
   const personaIntro =
     preferredAgentPersona === "DevotedSecretary"
@@ -134,6 +151,9 @@ function buildSystemPrompt(
     : "";
 
   return [
+    `当前用户的本地时间为：${localTimeStr}。请据此严格调整问候语和建议语气，绝不在深夜说"早上好"。`,
+    nameLine,
+    personaInstruction,
     personaIntro,
     mbtiLine,
     focusLine,
@@ -263,10 +283,10 @@ export async function POST(req: NextRequest) {
 // ---------------------------------------------------------------------------
 
 async function handleGreeting(body: SynthesisBody): Promise<NextResponse> {
-  const { userData } = body;
+  const { userData, timezone } = body;
   const { name, preferredAgentPersona } = userData ?? {};
 
-  const systemPrompt = buildSystemPrompt(userData ?? {}, "");
+  const systemPrompt = buildSystemPrompt(userData ?? {}, "", timezone ?? "UTC");
   const openingText = `${name || "你"}，你好。我是 Equi，你的个人 AI 生活架构师。`;
 
   const apiKey = process.env.GEMINI_API_KEY ?? "AIzaSyDxrlkrGepqu5qxCTAtvQ5fikWDcevUSi0";
@@ -312,7 +332,7 @@ async function handleGreeting(body: SynthesisBody): Promise<NextResponse> {
 // ---------------------------------------------------------------------------
 
 async function handleRagChat(body: SynthesisBody, userId: string): Promise<NextResponse> {
-  const { message, conversationHistory, userData } = body;
+  const { message, conversationHistory, userData, timezone } = body;
 
   if (!message || typeof message !== "string") {
     return NextResponse.json({ error: "message is required" }, { status: 400 });
@@ -338,7 +358,7 @@ async function handleRagChat(body: SynthesisBody, userId: string): Promise<NextR
 
   // Step C — build enhanced system prompt
   const ragContext = buildRagContext(matchedKnowledge);
-  const systemPrompt = buildSystemPrompt(userData ?? {}, ragContext);
+  const systemPrompt = buildSystemPrompt(userData ?? {}, ragContext, timezone ?? "UTC");
 
   // Format conversation history (last MAX_HISTORY turns)
   const historyParts = (conversationHistory ?? [])
