@@ -470,60 +470,57 @@ function DashboardContent() {
   const endHour = 23;
   const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i);
 
-  // Build real events from userData
-  const userEvents: Array<{
+  const [calendarEvents, setCalendarEvents] = useState<Array<{
+    id: string;
     title: string;
     dayIdx: number;
     start: number;
     end: number;
     isFixed: boolean;
-  }> = [];
+  }>>([]);
 
-  // Map full weekday names to short names
-  const weekdayToShort: Record<string, string> = {
-    Monday: "Mon",
-    Tuesday: "Tue",
-    Wednesday: "Wed",
-    Thursday: "Thu",
-    Friday: "Fri",
-    Saturday: "Sat",
-    Sunday: "Sun",
-  };
+  // Populate calendarEvents from userData — deduped by slot ID so push on re-render never ghosts
+  useEffect(() => {
+    if (!userData) return;
 
-  // Extract fixed activities from userData (with defensive checks)
-  const fixedActivities = userData?.lifeStructure?.fixedActivities || [];
-  for (const activity of (Array.isArray(fixedActivities) ? fixedActivities : [])) {
-    if (activity?.activityType === "strictlyFixed" && Array.isArray(activity?.slots)) {
-      for (const slot of activity.slots) {
-        if (slot?.day == null || slot?.startHour == null || slot?.endHour == null) continue;
-        const shortDay = weekdayToShort[slot.day] || slot.day;
-        const dayIdx = days.indexOf(shortDay as typeof days[number]);
-        if (dayIdx >= 0) {
+    const weekdayToShort: Record<string, string> = {
+      Monday: "Mon", Tuesday: "Tue", Wednesday: "Wed",
+      Thursday: "Thu", Friday: "Fri", Saturday: "Sat", Sunday: "Sun",
+    };
+
+    const events: Array<{
+      id: string; title: string; dayIdx: number; start: number; end: number; isFixed: boolean;
+    }> = [];
+
+    const seen = new Set<string>();
+    const fixedActivities = userData.lifeStructure?.fixedActivities || [];
+    for (const activity of Array.isArray(fixedActivities) ? fixedActivities : []) {
+      if (activity?.activityType === "strictlyFixed" && Array.isArray(activity?.slots)) {
+        for (const slot of activity.slots) {
+          if (slot?.day == null || slot?.startHour == null || slot?.endHour == null) continue;
+          const uid = `${slot.day}|${slot.startHour}|${slot.startMinute}|${slot.endHour}`;
+          if (seen.has(uid)) continue;
+          seen.add(uid);
+
+          const shortDay = weekdayToShort[slot.day] || slot.day;
+          const dayIdx = days.indexOf(shortDay as typeof days[number]);
+          if (dayIdx < 0) continue;
+
           const start = (slot.startHour ?? 0) + ((slot.startMinute ?? 0) / 60);
-          const end = (slot.endHour ?? 0) + ((slot.endMinute ?? 0) / 60);
+          const end   = (slot.endHour   ?? 0) + ((slot.endMinute   ?? 0) / 60);
           if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
-          userEvents.push({
-            title: activity.label || "Untitled",
-            dayIdx,
-            start,
-            end,
-            isFixed: true,
-          });
+
+          events.push({ id: uid, title: activity.label || "Untitled", dayIdx, start, end, isFixed: true });
         }
       }
     }
-  }
 
-  // Add AI-suggested placeholder if no events exist
-  if (userEvents.length === 0) {
-    userEvents.push({
-      title: "Deep Work: Thesis",
-      dayIdx: 2, // Wed
-      start: 10,
-      end: 13,
-      isFixed: false,
-    });
-  }
+    if (events.length === 0) {
+      events.push({ id: "placeholder-wed-deepwork", title: "Deep Work: Thesis", dayIdx: 2, start: 10, end: 13, isFixed: false });
+    }
+
+    setCalendarEvents(events);
+  }, [userData]);
 
   const hourLabel = (h: number) => {
     if (h === 0) return "12 AM";
@@ -686,7 +683,28 @@ function DashboardContent() {
                           : "max-w-[85%] rounded-2xl rounded-bl-md border border-gray-200 bg-white px-4 py-3 text-slate-800 shadow-[0_1px_4px_rgba(0,0,0,0.05)]"
                       }
                     >
-                      {m.content}
+                      {m.content.split("💡 [SCHEDULE_UPDATE]")[0].trim()}
+                      {m.content.includes("💡 [SCHEDULE_UPDATE]") && (
+                        <button
+                          onClick={() => {
+                            console.log("Adding to calendar...");
+                            const toast = document.createElement("div");
+                            toast.textContent = "Schedule updated!";
+                            toast.className =
+                              "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl bg-emerald-600 text-white px-5 py-2.5 text-sm font-semibold shadow-lg animate-[fade-up_0.3s_ease-out]";
+                            document.body.appendChild(toast);
+                            setTimeout(() => {
+                              toast.style.opacity = "0";
+                              toast.style.transition = "opacity 0.3s";
+                              setTimeout(() => toast.remove(), 300);
+                            }, 2800);
+                          }}
+                          className="mt-3 w-full rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 px-4 py-2.5 text-xs font-semibold text-amber-700 hover:from-amber-100 hover:to-orange-100 hover:border-amber-300 transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <SparkleIcon />
+                          Apply to Calendar
+                        </button>
+                      )}
                     </div>
                   ))}
                   <div ref={messagesEndRef} />
@@ -853,8 +871,8 @@ function DashboardContent() {
                   </div>
 
                   {/* Render real events */}
-                  {(Array.isArray(userEvents) ? userEvents : []).map((event, idx) => {
-                    if (!event || !Number.isFinite(event.dayIdx) || !Number.isFinite(event.start) || !Number.isFinite(event.end)) {
+                  {calendarEvents.map((event) => {
+                    if (!Number.isFinite(event.dayIdx) || !Number.isFinite(event.start) || !Number.isFinite(event.end)) {
                       return null;
                     }
                     const colStart = gridColForDayIdx(event.dayIdx);
@@ -865,7 +883,7 @@ function DashboardContent() {
                     }
                     return (
                     <div
-                      key={idx}
+                      key={event.id}
                       className={`z-10 mx-1 my-1 rounded-2xl px-3.5 py-2.5 text-xs text-slate-900 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.06)] ${
                         event.isFixed
                           ? "border border-gray-200 bg-white/90"
