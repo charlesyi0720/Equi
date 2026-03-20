@@ -334,6 +334,7 @@ function DashboardContent() {
       events.push({ id: "placeholder-wed-deepwork", title: "Deep Work: Thesis", dayIdx: 2, start: 10, end: 13, isFixed: false });
     }
 
+    events.sort((a, b) => (b.end - b.start) - (a.end - a.start));
     setCalendarEvents(events);
   }, [userData]);
 
@@ -943,9 +944,9 @@ function DashboardContent() {
                     return (
                     <div
                       key={event.id}
-                      className={`z-10 mx-1 my-1 rounded-2xl px-3.5 py-2.5 text-xs text-slate-900 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.06)] ${
+                      className={`z-10 mx-1 my-1 rounded-2xl px-3.5 py-2.5 text-xs text-slate-900 overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.12)] ${
                         event.isFixed
-                          ? "border border-gray-200 bg-white/90"
+                          ? "border border-gray-200 bg-white"
                           : "border border-dashed border-gray-300 bg-white"
                       }`}
                       style={{
