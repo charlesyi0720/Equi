@@ -346,6 +346,11 @@ function DashboardContent() {
       if (!supabase) return;
       const { data: { session } } = await supabase.auth.getSession();
       const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const localTimeStr = new Date().toLocaleString("en-US", {
+        timeZone: userTimezone,
+        dateStyle: "full",
+        timeStyle: "short",
+      });
       const response = await fetch("/api/synthesis", {
         method: "POST",
         headers: {
@@ -355,6 +360,7 @@ function DashboardContent() {
         body: JSON.stringify({
           isGreeting: true,
           timezone: userTimezone,
+          localTimeStr,
           userData: {
             name,
             mbti,
@@ -365,23 +371,29 @@ function DashboardContent() {
         }),
       });
       const data = await response.json();
-      
+
+      const browserHour = new Date().getHours();
+      const browserGreeting =
+        browserHour < 12 ? "Good morning" : browserHour < 17 ? "Good afternoon" : "Good evening";
+      const fallbackMsg = `${browserGreeting}. What would you like to accomplish today?`;
+
       const openingMessage: Message = {
         id: generateId(),
         role: "assistant",
-        content:
-          data.openingMessage ||
-          "Good morning. Want me to shape today around your 10 AM–1 PM focus peak?",
+        content: data.openingMessage || fallbackMsg,
         timestamp: new Date(),
       };
-      
+
       setMessages([openingMessage]);
     } catch (error) {
       console.error("Failed to generate opening message:", error);
+      const browserHour = new Date().getHours();
+      const browserGreeting =
+        browserHour < 12 ? "Good morning" : browserHour < 17 ? "Good afternoon" : "Good evening";
       const fallbackMessage: Message = {
         id: generateId(),
         role: "assistant",
-        content: "Good morning. What would you like to accomplish today?",
+        content: `${browserGreeting}. What would you like to accomplish today?`,
         timestamp: new Date(),
       };
       setMessages([fallbackMessage]);
@@ -420,6 +432,11 @@ function DashboardContent() {
       if (!supabase) return;
       const { data: { session } } = await supabase.auth.getSession();
       const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const localTimeStr = new Date().toLocaleString("en-US", {
+        timeZone: userTimezone,
+        dateStyle: "full",
+        timeStyle: "short",
+      });
       const response = await fetch("/api/synthesis", {
         method: "POST",
         headers: {
@@ -430,6 +447,7 @@ function DashboardContent() {
           message: userMessage.content,
           conversationHistory,
           timezone: userTimezone,
+          localTimeStr,
           userData: userContext,
         }),
       });
@@ -572,6 +590,11 @@ function DashboardContent() {
       if (!supabase) return;
       const { data: { session } } = await supabase.auth.getSession();
       const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const localTimeStr = new Date().toLocaleString("en-US", {
+        timeZone: userTimezone,
+        dateStyle: "full",
+        timeStyle: "short",
+      });
       const response = await fetch("/api/synthesis", {
         method: "POST",
         headers: {
@@ -582,6 +605,7 @@ function DashboardContent() {
           message: userMessage.content,
           conversationHistory,
           timezone: userTimezone,
+          localTimeStr,
           userData: userContext,
         }),
       });
