@@ -56,6 +56,7 @@ import { StepCalibration } from "./StepCalibration";
 import { LandingSection } from "./LandingSection";
 import { supabase, supabaseAdmin } from "../lib/supabase";
 import { getUser, updateProfile, hasCompletedOnboarding, getProfile, getSession } from "../lib/auth";
+import { embedUser } from "../lib/embedUser";
 import { useRouter } from "next/navigation";
 
 // ============================================================================
@@ -100,6 +101,8 @@ function OnboardingContent() {
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submittedUser, setSubmittedUser] = useState<EquiUser | null>(null);
+  const [embedStatus, setEmbedStatus] = useState<"idle" | "embedding" | "done" | "error">("idle");
+  const [embedError, setEmbedError] = useState<string>("");
   const [formData, setFormData] = useState({
     name: "",
     occupation: "",
@@ -457,25 +460,30 @@ function OnboardingContent() {
 
           if (upsertError) {
             console.error("Failed to upsert profile:", upsertError);
-          }
-        } else {
-          // Fallback: upsert by email (for non-auth users)
-          const { data, error: supabaseError } = await supabase
-            .from("profiles")
-            .upsert(
-              profileUpdate,
-              { onConflict: "email" }
-            );
-          
-          console.log("Supabase response - data:", data);
-          if (supabaseError) {
-            console.error("Supabase Sync Error:", supabaseError.message, supabaseError.details, supabaseError);
           } else {
-            console.log("Supabase Sync Success! Data:", data);
+            console.log("Supabase Sync Success! Profile saved.");
           }
         }
       }
-      
+
+      // Trigger knowledge embedding (RAG vectorization) after profile is saved
+      setEmbedStatus("embedding");
+      try {
+        const embedResult = await embedUser(finalData);
+        if (!embedResult.ok) {
+          console.error("[embed] Failed:", embedResult.error);
+          setEmbedError(embedResult.error ?? "Unknown error");
+          setEmbedStatus("error");
+        } else {
+          console.log("[embed] Knowledge vectors stored successfully");
+          setEmbedStatus("done");
+        }
+      } catch (err) {
+        console.error("[embed] Embedding threw:", err);
+        setEmbedError(String(err));
+        setEmbedStatus("error");
+      }
+
       // Set submitted state to show summary view
       setSubmittedUser(finalData);
       setIsSubmitted(true);
@@ -529,7 +537,7 @@ function OnboardingContent() {
         <>
         {isSubmitted && submittedUser ? (
           <div className="mx-auto w-full max-w-7xl px-6 py-6 lg:py-8">
-            <SummaryView user={submittedUser} />
+            <SummaryView user={submittedUser} embedStatus={embedStatus} embedError={embedError} />
           </div>
         ) : (
         <div className="max-w-2xl mx-auto px-6 py-12">
@@ -1396,9 +1404,11 @@ function Step6Persona({ formData, updateFormData, onBack, onSubmit }: Step6Perso
 
 interface SummaryViewProps {
   user: EquiUser;
+  embedStatus: "idle" | "embedding" | "done" | "error";
+  embedError: string;
 }
 
-function SummaryView({ user }: SummaryViewProps) {
+function SummaryView({ user, embedStatus, embedError }: SummaryViewProps) {
   const name = user?.understanding?.name || "User";
 
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
@@ -1450,6 +1460,29 @@ function SummaryView({ user }: SummaryViewProps) {
           </div>
         </div>
       </div>
+
+      {/* Embed / Knowledge Vector Status Banner */}
+      {embedStatus === "embedding" && (
+        <div className="flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm text-blue-700">
+          <span className="inline-block h-2 w-2 rounded-full bg-blue-400 animate-pulse" />
+          <span>Building your knowledge graph — indexing your schedule &amp; preferences…</span>
+        </div>
+      )}
+      {embedStatus === "done" && (
+        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm text-emerald-700">
+          <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
+          <span>Knowledge graph ready. Your copilot is fully initialized.</span>
+        </div>
+      )}
+      {embedStatus === "error" && (
+        <div className="flex flex-col gap-1 rounded-xl border border-rose-200 bg-rose-50 px-5 py-3 text-sm text-rose-700">
+          <div className="flex items-center gap-2 font-medium">
+            <span>⚠</span>
+            <span>Knowledge embedding failed. RAG features may be limited.</span>
+          </div>
+          <div className="text-xs text-rose-500 font-mono">{embedError}</div>
+        </div>
+      )}
 
       {/* Bottom: 30/70 split */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[3fr_7fr]">
