@@ -16,7 +16,7 @@ export async function embedUser(userData: EquiUser): Promise<{ ok: boolean; erro
   const chunks = generateUserContextChunks(userData);
 
   const res = await fetch(
-    `${process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000"}/api/embed`,
+    `${process.env.NEXT_PUBLIC_BASE_URL ?? ""}/api/embed`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
