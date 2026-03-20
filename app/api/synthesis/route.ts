@@ -12,7 +12,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabaseAdmin } from "../../equi/lib/supabase";
-import { geminiConfig } from "../../equi/lib/gemini";
 
 // #region agent log
 const LOG_ENDPOINT = "http://127.0.0.1:7854/ingest/5d92c0cc-abdd-4cd6-a71f-0a761f717228";
@@ -36,7 +35,8 @@ interface SynthesisMessage {
 }
 
 interface SynthesisBody {
-  message: string;
+  isGreeting?: boolean;
+  message?: string;
   conversationHistory?: SynthesisMessage[];
   userData?: {
     mbti?: string;
@@ -232,63 +232,7 @@ async function authUserId(req: NextRequest): Promise<{ userId: string } | NextRe
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/synthesis — opening message (unchanged behaviour)
-// ---------------------------------------------------------------------------
-
-export async function GET(req: NextRequest) {
-  const searchParams = req.nextUrl.searchParams;
-  const userDataParam = searchParams.get("userData");
-
-  if (!userDataParam) {
-    return NextResponse.json({ error: "userData is required" }, { status: 400 });
-  }
-
-  let userData: SynthesisBody["userData"];
-  try {
-    userData = JSON.parse(decodeURIComponent(userDataParam));
-  } catch {
-    return NextResponse.json({ error: "Invalid userData format" }, { status: 400 });
-  }
-
-  const { name } = userData ?? {};
-
-  const systemPrompt = buildSystemPrompt(userData, "");
-  const openingText = `${name || "你"}，你好。我是 Equi，你的个人 AI 生活架构师。`;
-
-  const response = await fetch(geminiConfig.getUrl(), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: {
-        role: "system",
-        parts: [
-          {
-            text:
-              systemPrompt +
-              "\n\n请用 1-2 句话作为开场白，语气根据人格设定调整（DevotedSecretary 要温暖鼓励，HardSupervisor 要简洁有力）。",
-          },
-        ],
-      },
-      contents: [{ role: "user", parts: [{ text: openingText }] }],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 100, topP: 0.95, topK: 40 },
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    return NextResponse.json({ error: "Gemini API failed", details: errorText }, { status: 500 });
-  }
-
-  const result = await response.json();
-  const text =
-    result.candidates?.[0]?.content?.parts?.[0]?.text ||
-    "让我帮你优化今天的时间安排。";
-
-  return NextResponse.json({ openingMessage: text });
-}
-
-// ---------------------------------------------------------------------------
-// POST /api/synthesis — RAG chat
+// POST /api/synthesis — handles both greeting and RAG chat
 // ---------------------------------------------------------------------------
 
 export async function POST(req: NextRequest) {
@@ -305,74 +249,131 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
+  // 3. Route: greeting vs. RAG chat
+  if (body.isGreeting) {
+    return handleGreeting(body);
+  }
+
+  return handleRagChat(body, userId);
+}
+
+// ---------------------------------------------------------------------------
+// Greeting path — non-streaming, returns JSON { openingMessage }
+// ---------------------------------------------------------------------------
+
+async function handleGreeting(body: SynthesisBody): Promise<NextResponse> {
+  const { userData } = body;
+  const { name, preferredAgentPersona } = userData ?? {};
+
+  const systemPrompt = buildSystemPrompt(userData ?? {}, "");
+  const openingText = `${name || "你"}，你好。我是 Equi，你的个人 AI 生活架构师。`;
+
+  const apiKey = process.env.GEMINI_API_KEY ?? "AIzaSyDxrlkrGepqu5qxCTAtvQ5fikWDcevUSi0";
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: {
+          role: "system",
+          parts: [
+            {
+              text:
+                systemPrompt +
+                "\n\n请用 1-2 句话作为开场白，语气根据人格设定调整（DevotedSecretary 要温暖鼓励，HardSupervisor 要简洁有力）。",
+            },
+          ],
+        },
+        contents: [{ role: "user", parts: [{ text: openingText }] }],
+        generationConfig: { temperature: 0.7, maxOutputTokens: 100, topP: 0.95, topK: 40 },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("[synthesis/greeting] Gemini API error:", response.status, errorText);
+    return NextResponse.json({ error: "Gemini API failed", details: errorText }, { status: 502 });
+  }
+
+  const result = await response.json();
+  const text =
+    result.candidates?.[0]?.content?.parts?.[0]?.text ||
+    "让我帮你优化今天的时间安排。";
+
+  return NextResponse.json({ openingMessage: text });
+}
+
+// ---------------------------------------------------------------------------
+// RAG chat path — streaming, streams SSE to client
+// ---------------------------------------------------------------------------
+
+async function handleRagChat(body: SynthesisBody, userId: string): Promise<NextResponse> {
   const { message, conversationHistory, userData } = body;
 
   if (!message || typeof message !== "string") {
     return NextResponse.json({ error: "message is required" }, { status: 400 });
   }
 
-  // 3. Step A — embed user message
+  // Step A — embed user message
   let queryEmbedding: number[];
   try {
     queryEmbedding = await embedMessage(message);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
-    console.error("[synthesis] Step A embed failed — full error:", err);
-    return NextResponse.json(
-      { error: "Embed failed", details: detail },
-      { status: 502 }
-    );
+    console.error("[synthesis/rag] Step A embed failed:", err);
+    return NextResponse.json({ error: "Embed failed", details: detail }, { status: 502 });
   }
 
-  // 4. Step B — retrieve knowledge (degrades gracefully on failure)
+  // Step B — retrieve knowledge (degrades gracefully)
   let matchedKnowledge: MatchedKnowledge[] = [];
   try {
     matchedKnowledge = await retrieveKnowledge(queryEmbedding, userId);
   } catch (err) {
-    console.warn("[synthesis] Step B retrieval failed, continuing without RAG:", err);
+    console.warn("[synthesis/rag] Step B retrieval failed, continuing without RAG:", err);
   }
 
-  // 5. Step C — build enhanced system prompt
+  // Step C — build enhanced system prompt
   const ragContext = buildRagContext(matchedKnowledge);
-  const systemPrompt = buildSystemPrompt(userData, ragContext);
+  const systemPrompt = buildSystemPrompt(userData ?? {}, ragContext);
 
-  // 6. Format conversation history (last MAX_HISTORY turns)
+  // Format conversation history (last MAX_HISTORY turns)
   const historyParts = (conversationHistory ?? [])
     .slice(-MAX_HISTORY)
     .map((msg) => ({ role: msg.role, parts: [{ text: msg.content }] }));
 
-  // 7. Build Gemini generateContent request
-  const requestBody = {
-    systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
-    contents: [
-      ...historyParts,
-      { role: "user", parts: [{ text: message }] },
-    ],
-    generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 1024,
-      topP: 0.95,
-      topK: 40,
-    },
-  };
+  const apiKey = process.env.GEMINI_API_KEY ?? "AIzaSyDxrlkrGepqu5qxCTAtvQ5fikWDcevUSi0";
 
-  // 8. Call Gemini with streaming
-  const response = await fetch(geminiConfig.getStreamUrl(), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(requestBody),
-  });
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?alt=sse&key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
+        contents: [
+          ...historyParts,
+          { role: "user", parts: [{ text: message }] },
+        ],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 1024,
+          topP: 0.95,
+          topK: 40,
+        },
+      }),
+    }
+  );
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("[synthesis] Gemini API error:", response.status, errorText);
-    return NextResponse.json(
-      { error: "Gemini API failed", details: errorText },
-      { status: 502 }
-    );
+    console.error("[synthesis/rag] Gemini API error:", response.status, errorText);
+    return NextResponse.json({ error: "Gemini API failed", details: errorText }, { status: 502 });
   }
 
-  // 9. Stream Gemini SSE response to client
+  // Stream Gemini SSE response to client
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
@@ -412,7 +413,7 @@ export async function POST(req: NextRequest) {
           }
         }
       } catch (e) {
-        console.error("[synthesis] stream read error:", e);
+        console.error("[synthesis/rag] stream read error:", e);
       } finally {
         controller.close();
       }

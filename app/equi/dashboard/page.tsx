@@ -290,20 +290,26 @@ function DashboardContent() {
     if (!userData) return;
 
     const { name, mbti, biologicalClock, preferredAgentPersona } = userData.understanding || {};
-    
-    try {
-      const userDataParam = encodeURIComponent(JSON.stringify({
-        name,
-        mbti,
-        focusPeaks: biologicalClock?.focusPeaks,
-        energyDips: biologicalClock?.energyDips,
-        preferredAgentPersona,
-      }));
 
+    try {
       if (!supabase) return;
       const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch(`/api/synthesis?userData=${userDataParam}`, {
-        headers: { Authorization: `Bearer ${session?.access_token ?? ""}` },
+      const response = await fetch("/api/synthesis", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token ?? ""}`,
+        },
+        body: JSON.stringify({
+          isGreeting: true,
+          userData: {
+            name,
+            mbti,
+            focusPeaks: biologicalClock?.focusPeaks,
+            energyDips: biologicalClock?.energyDips,
+            preferredAgentPersona,
+          },
+        }),
       });
       const data = await response.json();
       
