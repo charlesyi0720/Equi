@@ -56,7 +56,6 @@ import { StepCalibration } from "./StepCalibration";
 import { LandingSection } from "./LandingSection";
 import { supabase, supabaseAdmin } from "../lib/supabase";
 import { getUser, updateProfile, hasCompletedOnboarding, getProfile, getSession } from "../lib/auth";
-import { embedUser } from "../lib/embedUser";
 import { useRouter } from "next/navigation";
 
 // ============================================================================
@@ -469,23 +468,40 @@ function OnboardingContent() {
       // Trigger knowledge embedding (RAG vectorization) after profile is saved
       setEmbedStatus("embedding");
       try {
-        const embedResult = await embedUser(finalData);
-        if (!embedResult.ok) {
-          console.error("[embed] Failed:", embedResult.error);
-          setEmbedError(embedResult.error ?? "Unknown error");
+        console.log("Starting data embedding...");
+
+        const userChunks = [
+          `Name: ${finalData?.understanding?.name || "User"}. MBTI: ${finalData?.understanding?.mbti || "Unknown"}. Preferred AI Persona: ${finalData?.understanding?.preferredAgentPersona || "Executive Assistant"}.`,
+          `Biological Clock Focus Peaks: ${JSON.stringify(finalData?.understanding?.biologicalClock?.focusPeaks || [])}. Energy Dips: ${JSON.stringify(finalData?.understanding?.biologicalClock?.energyDips || [])}.`,
+          `Fixed Life Structure Activities: ${JSON.stringify(finalData?.lifeStructure?.fixedActivities || [])}`,
+        ];
+
+        const embedRes = await fetch("/api/embed", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user.id,
+            chunks: userChunks,
+          }),
+        });
+
+        if (!embedRes.ok) {
+          const errText = await embedRes.text();
+          console.error("Embedding API failed:", embedRes.status, errText);
+          setEmbedError(`${embedRes.status}: ${errText}`);
           setEmbedStatus("error");
         } else {
-          console.log("[embed] Knowledge vectors stored successfully");
+          console.log("Embedding successful! Data written to Supabase pgvector.");
           setEmbedStatus("done");
         }
       } catch (err) {
-        console.error("[embed] Embedding threw:", err);
+        console.error("Network error during embedding:", err);
         setEmbedError(String(err));
         setEmbedStatus("error");
+      } finally {
+        // Hard-navigate to the real dashboard — bypass the Next.js client cache and mount the live app
+        window.location.href = "/equi/dashboard";
       }
-
-      // Hard-navigate to the real dashboard — bypass the Next.js client cache and mount the live app
-      window.location.href = "/equi/dashboard";
       
       // alert("Onboarding complete! Check console for EquiUser object.");
     } catch (error) {
