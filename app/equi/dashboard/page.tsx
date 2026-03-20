@@ -470,7 +470,7 @@ function DashboardContent() {
         const { done, value } = await reader!.read();
         if (done) break;
         
-        const chunk = decoder.decode(value);
+        const chunk = decoder.decode(value, { stream: true });
         assistantMessage.content += chunk;
         
         setMessages((prev) => 
@@ -639,7 +639,7 @@ function DashboardContent() {
         const { done, value } = await reader!.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
+        const chunk = decoder.decode(value, { stream: true });
         assistantMessage.content += chunk;
 
         setMessages((prev) =>

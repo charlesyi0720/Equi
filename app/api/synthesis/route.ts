@@ -9,6 +9,8 @@
  * Auth: requires valid Supabase JWT; userId is extracted from the verified token.
  */
 
+export const maxDuration = 60;
+
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabaseAdmin } from "../../equi/lib/supabase";
@@ -384,7 +386,7 @@ async function handleRagChat(body: SynthesisBody, userId: string): Promise<NextR
     ],
     generationConfig: {
       temperature: 0.7,
-      maxOutputTokens: 1024,
+      maxOutputTokens: 4096,
       topP: 0.95,
       topK: 40,
     },
