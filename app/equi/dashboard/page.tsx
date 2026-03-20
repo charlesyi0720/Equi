@@ -972,8 +972,6 @@ function DashboardContent() {
   );
 }
 
-  const submitQuickAction = async (text: string) => {
-
 function generateId(): string {
   return Math.random().toString(36).substring(2, 11);
 }
