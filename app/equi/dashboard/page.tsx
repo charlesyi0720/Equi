@@ -554,7 +554,7 @@ function DashboardContent() {
 
   const gridColForDayIdx = (dayIdx: number) => dayIdx + 2; // +2 because col 1 is time labels, col 2+ are days
   const gridRowForHour = (h: number) => h + 2; // +2 because row 1 is header, row 2 = hour 0
-  const gridRowEndForHour = (h: number) => h + 3; // end is exclusive
+  const gridRowEndForHour = (h: number) => h + 2;
 
   const focusPeakStart = 10;
   const focusPeakEnd = 13;
@@ -936,7 +936,7 @@ function DashboardContent() {
                     }
                     const colStart = gridColForDayIdx(event.dayIdx);
                     const rowStart = gridRowForHour(Math.floor(event.start));
-                    const rowEnd = gridRowEndForHour(Math.ceil(event.end));
+                    const rowEnd = gridRowEndForHour(Math.round(event.end));
                     if (!Number.isFinite(colStart) || !Number.isFinite(rowStart) || !Number.isFinite(rowEnd)) {
                       return null;
                     }
