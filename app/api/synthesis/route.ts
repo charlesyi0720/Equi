@@ -63,6 +63,7 @@ interface MatchedKnowledge {
 }
 
 const EMBEDDING_MODEL = "gemini-embedding-001";
+const CHAT_MODEL = "gemini-1.5-flash-latest";
 const MAX_HISTORY = 10;   // keep last 10 turns for context
 const MATCH_COUNT = 3;   // top-K knowledge chunks to retrieve
 
@@ -271,7 +272,7 @@ async function handleGreeting(body: SynthesisBody): Promise<NextResponse> {
   const apiKey = process.env.GEMINI_API_KEY ?? "AIzaSyDxrlkrGepqu5qxCTAtvQ5fikWDcevUSi0";
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${CHAT_MODEL}:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -347,7 +348,7 @@ async function handleRagChat(body: SynthesisBody, userId: string): Promise<NextR
   const apiKey = process.env.GEMINI_API_KEY ?? "AIzaSyDxrlkrGepqu5qxCTAtvQ5fikWDcevUSi0";
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?alt=sse&key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${CHAT_MODEL}:streamGenerateContent?alt=sse&key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
