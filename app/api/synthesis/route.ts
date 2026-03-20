@@ -297,7 +297,10 @@ async function handleGreeting(body: SynthesisBody): Promise<NextResponse> {
   const systemPrompt = buildSystemPrompt(userData ?? {}, "", timezone ?? "UTC", localTimeStr);
   const openingText = `${name || "there"}, hello. I am Equi, your personal AI life architect.`;
 
-  const apiKey = process.env.GEMINI_API_KEY ?? "AIzaSyDxrlkrGepqu5qxCTAtvQ5fikWDcevUSi0";
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json({ error: "API Key missing" }, { status: 500 });
+  }
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${CHAT_MODEL}:generateContent?key=${apiKey}`,
@@ -373,24 +376,30 @@ async function handleRagChat(body: SynthesisBody, userId: string): Promise<NextR
     .slice(-MAX_HISTORY)
     .map((msg) => ({ role: msg.role, parts: [{ text: msg.content }] }));
 
-  const apiKey = process.env.GEMINI_API_KEY ?? "AIzaSyDxrlkrGepqu5qxCTAtvQ5fikWDcevUSi0";
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json({ error: "API Key missing" }, { status: 500 });
+  }
 
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({ model: CHAT_MODEL });
 
-  const result = await model.generateContentStream({
-    systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
-    contents: [
-      ...historyParts,
-      { role: "user", parts: [{ text: message }] },
-    ],
-    generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 4096,
-      topP: 0.95,
-      topK: 40,
-    },
-  });
+  let result;
+  try {
+    result = await model.generateContentStream({
+      systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
+      contents: historyParts,
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 4096,
+        topP: 0.95,
+        topK: 40,
+      },
+    });
+  } catch (err: any) {
+    console.error("[synthesis/rag] Gemini API Crash:", err);
+    return NextResponse.json({ error: "Gemini Generation Failed", details: err.message }, { status: 502 });
+  }
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
