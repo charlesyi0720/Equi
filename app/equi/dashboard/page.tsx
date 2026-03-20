@@ -653,6 +653,10 @@ function DashboardContent() {
     }
   };
 
+  const uniqueVisualEvents = Array.from(
+    new Map(calendarEvents.map((e) => [`${e.dayIdx}-${e.start}`, e])).values()
+  );
+
   return (
     <div className="min-h-screen bg-gray-50 text-slate-900 font-sans">
       <div className="mx-auto w-full max-w-7xl px-6 py-6 lg:py-8">
@@ -720,7 +724,22 @@ function DashboardContent() {
                       {m.content.includes("💡 [SCHEDULE_UPDATE]") && (
                         <button
                           onClick={() => {
-                            console.log("Adding to calendar...");
+                            const match = m.content.match(/\[SCHEDULE_UPDATE:\s*(.*?)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(.*?)\]/i);
+                            if (!match) return alert("Failed to parse AI schedule tag.");
+                            const [_, title, start, end, day] = match;
+                            const dayMap: Record<string, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
+                            const dayIdx = dayMap[day.trim().toLowerCase().substring(0, 3)] ?? new Date().getDay() - 1;
+                            setCalendarEvents((prev) => [
+                              ...prev,
+                              {
+                                id: `dynamic-${Date.now()}`,
+                                title: title.trim(),
+                                dayIdx,
+                                start: parseInt(start),
+                                end: parseInt(end),
+                                isFixed: false,
+                              },
+                            ]);
                             const toast = document.createElement("div");
                             toast.textContent = "Schedule updated!";
                             toast.className =
@@ -904,7 +923,7 @@ function DashboardContent() {
                   </div>
 
                   {/* Render real events */}
-                  {calendarEvents.map((event) => {
+                  {uniqueVisualEvents.map((event) => {
                     if (!Number.isFinite(event.dayIdx) || !Number.isFinite(event.start) || !Number.isFinite(event.end)) {
                       return null;
                     }
@@ -952,6 +971,8 @@ function DashboardContent() {
     </div>
   );
 }
+
+  const submitQuickAction = async (text: string) => {
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 11);

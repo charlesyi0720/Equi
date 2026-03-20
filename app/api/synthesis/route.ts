@@ -75,9 +75,9 @@ const MATCH_COUNT = 3;   // top-K knowledge chunks to retrieve
 
 const TONE_INSTRUCTIONS = `
 
-【语气要求】
-- 当你引用用户的"精力低谷"或"MBTI 特质"进行建议时，请使用鼓励性且专业的语气。
-- 遇到挑战时，以建设性方案为导向，避免批评或施压。
+[Tone Requirements]
+- When citing the user's "energy dips" or "MBTI traits" for advice, use an encouraging and professional tone.
+- When facing challenges, orient toward constructive solutions; avoid criticism or pressure.
 `;
 
 const SCHEDULE_UPDATE_MARKER =
@@ -85,23 +85,23 @@ const SCHEDULE_UPDATE_MARKER =
 
 const SCHEDULE_INSTRUCTIONS = `
 
-【日程建议输出规范】
-- 当你建议修改用户日程时，请在相关建议句末附加标记：${SCHEDULE_UPDATE_MARKER}
-- 前端会识别此标记并高亮显示日程建议区域。请勿在其他类型的回复中添加此标记。
+[Schedule Suggestion Output Format]
+- When you suggest modifying the user's schedule, append this marker at the end of the relevant suggestion sentence: ${SCHEDULE_UPDATE_MARKER}
+- The frontend will recognize this marker and highlight the schedule suggestion area. Do NOT add this marker to other types of responses.
 `;
 
 function buildRagContext(matches: MatchedKnowledge[]): string {
   if (!matches.length) return "";
 
   const blocks = matches.map((m, i) => {
-    const tag = (m.metadata?.chunk_type as string) ?? `块${i + 1}`;
+    const tag = (m.metadata?.chunk_type as string) ?? `Chunk ${i + 1}`;
     return `[${tag}] ${m.content}`;
   });
 
   return (
-    "\n\n【用户背景知识】\n" +
+    "\n\n[User Background Knowledge]\n" +
     blocks.join("\n\n") +
-    "\n\n请基于以上背景知识回答用户提问。如知识块与问题无关，仅作参考依据而非限制。"
+    "\n\nPlease answer the user's question based on the above background knowledge. If knowledge chunks are unrelated to the question, use them as reference only and do not let them limit your answer."
   );
 }
 
@@ -122,38 +122,41 @@ function buildSystemPrompt(
   });
 
   const nameLine = name
-    ? `用户的名字是 ${name}。请始终以 ${name} 称呼用户，不要使用"Boss"等泛称（除非人格设定另有要求）。`
+    ? `The user's name is ${name}. Always address the user by their name. Do not use generic terms like "Boss" unless the persona specifically dictates it.`
     : "";
 
   const personaInstruction = preferredAgentPersona
-    ? `你的人格和语气必须严格匹配以下设定：${preferredAgentPersona}。`
+    ? `Your personality and tone MUST strictly match this persona: ${preferredAgentPersona}.`
     : "";
 
   const personaIntro =
     preferredAgentPersona === "DevotedSecretary"
-      ? "你是一位温暖鼓励型的私人 AI 生活架构师，擅长以同理心陪伴用户制定计划。"
+      ? "You are a warm and encouraging AI personal life architect, skilled at empathetically accompanying users to plan their schedules."
       : preferredAgentPersona === "HardSupervisor"
-      ? "你是一位简洁有力的 AI 督导型生活架构师，注重效率与成果交付。"
-      : "你是一位专业且贴心的 AI 生活架构师。";
+      ? "You are a concise and powerful AI supervisor-style life architect, focused on efficiency and delivering results."
+      : "You are a professional and caring AI life architect.";
 
   const mbtiLine = mbti
-    ? `用户 MBTI 类型为 ${mbti}，可据此调整表达风格与建议方式。`
+    ? `The user's MBTI type is ${mbti}. You may adjust your communication style and advice approach accordingly.`
     : "";
 
   const focusLine = focusPeaks?.length
-    ? `用户在以下时段精力最充沛：${focusPeaks.map((p) => `${p.weekday} ${p.start.hour}:00–${p.end.hour}:00`).join("、")}。`
+    ? `The user is most energetic during these time slots: ${focusPeaks.map((p) => `${p.weekday} ${p.start.hour}:00–${p.end.hour}:00`).join(", ")}.`
     : "";
 
   const dipLine = energyDips?.length
-    ? `用户在以下时段精力较低：${energyDips.map((d) => `${d.weekday} ${d.start.hour}:00–${d.end.hour}:00`).join("、")}。`
+    ? `The user experiences energy dips during these time slots: ${energyDips.map((d) => `${d.weekday} ${d.start.hour}:00–${d.end.hour}:00`).join(", ")}.`
     : "";
 
   const scheduleLine = todaySchedule
-    ? `今日日程摘要：${todaySchedule}`
+    ? `Today's schedule summary: ${todaySchedule}`
     : "";
 
+  const languageRule =
+    "CRITICAL RULE: You MUST respond entirely in the language the user is currently typing in (e.g., reply in English if the user types in English. DO NOT force Chinese).";
+
   return [
-    `当前用户的本地时间为：${localTimeStr ?? serverTimeStr}。请据此严格调整问候语和建议语气，绝不在深夜说"早上好"。`,
+    `The user's current local time is: ${localTimeStr ?? serverTimeStr}. Adjust your greetings and scheduling suggestions strictly to match this time of day. Never say "Good morning" when it is clearly evening or night.`,
     nameLine,
     personaInstruction,
     personaIntro,
@@ -164,6 +167,7 @@ function buildSystemPrompt(
     TONE_INSTRUCTIONS,
     SCHEDULE_INSTRUCTIONS,
     ragContext,
+    languageRule,
   ]
     .filter(Boolean)
     .join("\n");
@@ -289,7 +293,7 @@ async function handleGreeting(body: SynthesisBody): Promise<NextResponse> {
   const { name, preferredAgentPersona } = userData ?? {};
 
   const systemPrompt = buildSystemPrompt(userData ?? {}, "", timezone ?? "UTC", localTimeStr);
-  const openingText = `${name || "你"}，你好。我是 Equi，你的个人 AI 生活架构师。`;
+  const openingText = `${name || "there"}, hello. I am Equi, your personal AI life architect.`;
 
   const apiKey = process.env.GEMINI_API_KEY ?? "AIzaSyDxrlkrGepqu5qxCTAtvQ5fikWDcevUSi0";
 
@@ -305,7 +309,7 @@ async function handleGreeting(body: SynthesisBody): Promise<NextResponse> {
             {
               text:
                 systemPrompt +
-                "\n\n请用 1-2 句话作为开场白，语气根据人格设定调整（DevotedSecretary 要温暖鼓励，HardSupervisor 要简洁有力）。",
+                "\n\nPlease give a 1-2 sentence opening in English, with tone adjusted to match the persona (DevotedSecretary should be warm and encouraging, HardSupervisor should be concise and powerful).",
             },
           ],
         },
@@ -369,88 +373,32 @@ async function handleRagChat(body: SynthesisBody, userId: string): Promise<NextR
 
   const apiKey = process.env.GEMINI_API_KEY ?? "AIzaSyDxrlkrGepqu5qxCTAtvQ5fikWDcevUSi0";
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${CHAT_MODEL}:streamGenerateContent?alt=sse&key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
-        contents: [
-          ...historyParts,
-          { role: "user", parts: [{ text: message }] },
-        ],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 1024,
-          topP: 0.95,
-          topK: 40,
-        },
-      }),
-    }
-  );
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: CHAT_MODEL });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error("[synthesis/rag] Gemini API error:", response.status, errorText);
-    return NextResponse.json({ error: "Gemini API failed", details: errorText }, { status: 502 });
-  }
+  const result = await model.generateContentStream({
+    systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
+    contents: [
+      ...historyParts,
+      { role: "user", parts: [{ text: message }] },
+    ],
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 1024,
+      topP: 0.95,
+      topK: 40,
+    },
+  });
 
-  // Stream Gemini SSE response to client
   const encoder = new TextEncoder();
-
   const stream = new ReadableStream({
     async start(controller) {
-      const reader = response.body?.getReader();
-      if (!reader) {
-        controller.close();
-        return;
-      }
-
       try {
-        let buffer = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += new TextDecoder().decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || ""; // carry incomplete tail to next iteration
-
-          for (const line of lines) {
-            if (!line.startsWith("data: ")) continue;
-            const data = line.slice(6).trim();
-            if (data === "[DONE]") {
-              controller.close();
-              return;
-            }
-
-            try {
-              const parsed = JSON.parse(data);
-              const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
-              if (text) controller.enqueue(encoder.encode(text));
-            } catch {
-              // skip malformed SSE lines
-            }
-          }
-        }
-
-        // flush any remaining buffer after stream ends
-        if (buffer.startsWith("data: ")) {
-          const data = buffer.slice(6).trim();
-          if (data !== "[DONE]") {
-            try {
-              const parsed = JSON.parse(data);
-              const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
-              if (text) controller.enqueue(encoder.encode(text));
-            } catch {
-              // ignore
-            }
-          }
+        for await (const chunk of result.stream) {
+          controller.enqueue(encoder.encode(chunk.text()));
         }
       } catch (e) {
-        console.error("[synthesis/rag] stream read error:", e);
+        console.error("[synthesis/rag] stream error:", e);
       } finally {
         controller.close();
       }
@@ -458,9 +406,6 @@ async function handleRagChat(body: SynthesisBody, userId: string): Promise<NextR
   });
 
   return new NextResponse(stream, {
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Transfer-Encoding": "chunked",
-    },
+    headers: { "Content-Type": "text/plain; charset=utf-8", "Transfer-Encoding": "chunked" },
   });
 }
