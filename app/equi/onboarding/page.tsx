@@ -484,9 +484,8 @@ function OnboardingContent() {
         setEmbedStatus("error");
       }
 
-      // Set submitted state to show summary view
-      setSubmittedUser(finalData);
-      setIsSubmitted(true);
+      // Hard-navigate to the real dashboard — bypass the Next.js client cache and mount the live app
+      window.location.href = "/equi/dashboard";
       
       // alert("Onboarding complete! Check console for EquiUser object.");
     } catch (error) {
