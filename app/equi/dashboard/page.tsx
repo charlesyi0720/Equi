@@ -144,16 +144,14 @@ function titlesLikelySame(a: string, b: string): boolean {
   return na.slice(0, prefixLen) === nb.slice(0, prefixLen);
 }
 
-function intervalsOverlapOrTouch(a: CalendarGridEvent, b: CalendarGridEvent, touchEps = 1e-3): boolean {
+/** True only when intervals overlap with positive duration (not merely back-to-back, e.g. 12–1 and 1–3 stay separate). */
+function intervalsStrictlyOverlap(a: CalendarGridEvent, b: CalendarGridEvent): boolean {
   const lo = Math.max(a.start, b.start);
   const hi = Math.min(a.end, b.end);
-  if (lo < hi - 1e-6) return true;
-  if (Math.abs(a.end - b.start) < touchEps) return true;
-  if (Math.abs(b.end - a.start) < touchEps) return true;
-  return false;
+  return lo < hi - 1e-6;
 }
 
-/** Merge duplicate / overlapping slots for the same course on the same day so we only side-by-side when truly different activities clash. */
+/** Merge duplicate overlapping slots for the same course on the same day (e.g. two ICS rows for 12–2 and 13–15). Adjacent slots are not merged. */
 function mergeCalendarEventsForDisplay(events: CalendarGridEvent[]): CalendarGridEvent[] {
   const byDay = new Map<number, CalendarGridEvent[]>();
   for (const ev of events) {
@@ -167,7 +165,7 @@ function mergeCalendarEventsForDisplay(events: CalendarGridEvent[]): CalendarGri
     const stack: CalendarGridEvent[] = [];
     for (const ev of sorted) {
       const last = stack[stack.length - 1];
-      if (last && titlesLikelySame(last.title, ev.title) && intervalsOverlapOrTouch(last, ev)) {
+      if (last && titlesLikelySame(last.title, ev.title) && intervalsStrictlyOverlap(last, ev)) {
         last.start = Math.min(last.start, ev.start);
         last.end = Math.max(last.end, ev.end);
         if (normalizeTitleForMerge(ev.title).length > normalizeTitleForMerge(last.title).length) {

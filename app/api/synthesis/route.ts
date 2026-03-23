@@ -408,6 +408,15 @@ async function handleRagChat(body: SynthesisBody, userId: string): Promise<NextR
     .slice(-MAX_HISTORY)
     .map((msg) => ({ role: msg.role, parts: [{ text: msg.content }] }));
 
+  // Current user message must appear in `contents`. handleSubmit sends history WITHOUT the new turn;
+  // submitQuickAction sends history that already includes the new user message — avoid duplicating.
+  const lastPart = historyParts[historyParts.length - 1];
+  const lastAlreadyThisUser =
+    lastPart?.role === "user" && lastPart.parts[0]?.text === message;
+  const contents = lastAlreadyThisUser
+    ? historyParts
+    : [...historyParts, { role: "user" as const, parts: [{ text: message }] }];
+
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: "API Key missing" }, { status: 500 });
@@ -420,7 +429,7 @@ async function handleRagChat(body: SynthesisBody, userId: string): Promise<NextR
   try {
     result = await model.generateContentStream({
       systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
-      contents: historyParts,
+      contents,
       generationConfig: {
         temperature: 0.7,
         maxOutputTokens: 4096,
