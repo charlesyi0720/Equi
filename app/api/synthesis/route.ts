@@ -82,14 +82,27 @@ const TONE_INSTRUCTIONS = `
 - When facing challenges, orient toward constructive solutions; avoid criticism or pressure.
 `;
 
+const BREVITY_INSTRUCTIONS = `
+
+[Brevity Requirements]
+- Keep responses short and focused: aim for 2-4 sentences maximum.
+- Start with the key conclusion or action first, then one clarifying detail if needed.
+- Only elaborate when the user explicitly asks for details or steps.
+- For scheduling suggestions: lead with the proposed time block, then one brief rationale.
+`;
+
 const SCHEDULE_UPDATE_MARKER =
   "💡 [SCHEDULE_UPDATE]";
 
 const SCHEDULE_INSTRUCTIONS = `
 
 [Schedule Suggestion Output Format]
-- When you suggest modifying the user's schedule, append this marker at the end of the relevant suggestion sentence: ${SCHEDULE_UPDATE_MARKER}
-- The frontend will recognize this marker and highlight the schedule suggestion area. Do NOT add this marker to other types of responses.
+- When you suggest modifying the user's schedule, include the machine-readable tag ON ITS OWN LINE at the END of your response:
+  ${SCHEDULE_UPDATE_MARKER}: Event Title | startHour | endHour | day
+  Example: 💡 [SCHEDULE_UPDATE]: Deep Work Block | 14 | 16 | wed
+- Field definitions: title (plain text, no pipes), startHour (integer 0-23), endHour (integer 0-23, must be greater than startHour), day (3-letter lowercase: mon/tue/wed/thu/fri/sat/sun).
+- Do NOT put any other text on that same line. The frontend will NOT apply updates without this exact line.
+- Do NOT add this tag to non-scheduling responses.
 `;
 
 function buildRagContext(matches: MatchedKnowledge[]): string {
@@ -167,6 +180,7 @@ function buildSystemPrompt(
     dipLine,
     scheduleLine,
     TONE_INSTRUCTIONS,
+    BREVITY_INSTRUCTIONS,
     SCHEDULE_INSTRUCTIONS,
     ragContext,
     languageRule,
@@ -338,8 +352,14 @@ async function handleGreeting(body: SynthesisBody): Promise<NextResponse> {
   const allText = rawParts.map((p) => p.text ?? "").join("").trim();
 
   if (!allText || finishReason === "MAX_TOKENS" || finishReason === "SAFETY") {
-    const hour = new Date().getHours();
-    const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+    const tz = timezone ?? "UTC";
+    const hourStr = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hour: "numeric",
+      hour12: false,
+    }).format(new Date());
+    const hour = parseInt(hourStr, 10);
+    const greeting = !isNaN(hour) && hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
     const fallback = `${greeting}! What would you like to accomplish today?`;
     console.warn(
       `[synthesis/greeting] Unusable response, falling back. finishReason=${finishReason}, text=${allText.slice(0, 40)}`

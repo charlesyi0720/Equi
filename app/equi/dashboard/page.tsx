@@ -664,6 +664,33 @@ function DashboardContent() {
     new Map(calendarEvents.map((e) => [e.id, e])).values()
   );
 
+  // Compute overlapping lanes per event: { laneIndex, laneCount }
+  const eventLaneMap: Map<string, { laneIndex: number; laneCount: number }> = new Map();
+  {
+    const byDay: Map<number, typeof calendarEvents> = new Map();
+    for (const ev of uniqueVisualEvents) {
+      if (!Number.isFinite(ev.dayIdx)) continue;
+      const list = byDay.get(ev.dayIdx) ?? [];
+      list.push(ev);
+      byDay.set(ev.dayIdx, list);
+    }
+    for (const [, evs] of byDay) {
+      const sorted = [...evs].sort((a, b) => a.start - b.start);
+      const laneEnds: number[] = [];
+      for (const ev of sorted) {
+        const occupied = laneEnds.findIndex((end) => end <= ev.start);
+        const lane = occupied >= 0 ? occupied : laneEnds.length;
+        laneEnds[lane] = ev.end;
+        eventLaneMap.set(ev.id, { laneIndex: lane, laneCount: 0 });
+      }
+      const total = laneEnds.length;
+      for (const ev of sorted) {
+        const prev = eventLaneMap.get(ev.id)!;
+        eventLaneMap.set(ev.id, { ...prev, laneCount: total });
+      }
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 text-slate-900 font-sans">
       <div className="mx-auto w-full max-w-7xl px-6 py-6 lg:py-8">
@@ -727,11 +754,11 @@ function DashboardContent() {
                           : "max-w-[85%] rounded-2xl rounded-bl-md border border-gray-200 bg-white px-4 py-3 text-slate-800 shadow-[0_1px_4px_rgba(0,0,0,0.05)]"
                       }
                     >
-                      {m.content.replace(/\s*💡 \[SCHEDULE_UPDATE:[^\]]*\]/g, "").trim()}
-                      {/💡 \[SCHEDULE_UPDATE:/i.test(m.content) && (
+                      {m.content.replace(/\s*💡?\s*\[SCHEDULE_UPDATE:[^\]]*\]/g, "").trim()}
+                      {/\[SCHEDULE_UPDATE:/i.test(m.content) && (
                         <button
                           onClick={() => {
-                            const match = m.content.match(/\[SCHEDULE_UPDATE:\s*(.*?)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(.*?)\]/i);
+                            const match = m.content.match(/\[SCHEDULE_UPDATE:\s*(.*?)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*([^\]\s]+)\]/i);
                             if (!match) return alert("Failed to parse AI schedule tag.");
                             const [_, title, start, end, day] = match;
                             const dayMap: Record<string, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
@@ -938,10 +965,13 @@ function DashboardContent() {
                     if (!Number.isFinite(colStart)) {
                       return null;
                     }
+                    const lane = eventLaneMap.get(event.id);
+                    const laneIndex = lane?.laneIndex ?? 0;
+                    const laneCount = lane?.laneCount ?? 1;
                     return (
                     <div
                       key={event.id}
-                      className={`z-10 mx-1 my-1 rounded-2xl px-2 py-1.5 text-xs text-slate-900 overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.12)] ${
+                      className={`z-10 rounded-2xl px-2 py-1.5 text-xs text-slate-900 overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.12)] ${
                         event.isFixed
                           ? "border border-gray-200 bg-white"
                           : "border border-dashed border-gray-300 bg-white"
@@ -951,6 +981,8 @@ function DashboardContent() {
                         gridColumnEnd: colStart + 1,
                         gridRowStart: Math.floor(event.start) + 2,
                         gridRowEnd: Math.floor(event.end) + 2,
+                        width: laneCount > 1 ? `calc(${100 / laneCount}% - 8px)` : "calc(100% - 8px)",
+                        marginLeft: laneCount > 1 ? `${(laneIndex / laneCount) * 100}%` : "0",
                       }}
                     >
                       <div className={`font-semibold line-clamp-2 leading-tight ${!event.isFixed ? "flex items-center gap-1.5 text-slate-800" : "text-slate-700"}`}>
