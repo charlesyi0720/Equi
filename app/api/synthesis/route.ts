@@ -319,7 +319,7 @@ async function handleGreeting(body: SynthesisBody): Promise<NextResponse> {
           ],
         },
         contents: [{ role: "user", parts: [{ text: openingText }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 100, topP: 0.95, topK: 40 },
+        generationConfig: { temperature: 0.7, maxOutputTokens: 256, topP: 0.95, topK: 40 },
       }),
     }
   );
@@ -331,11 +331,23 @@ async function handleGreeting(body: SynthesisBody): Promise<NextResponse> {
   }
 
   const result = await response.json();
-  const text =
-    result.candidates?.[0]?.content?.parts?.[0]?.text ||
-    "让我帮你优化今天的时间安排。";
+  const candidate = result.candidates?.[0];
 
-  return NextResponse.json({ openingMessage: text });
+  const finishReason = candidate?.finishReason;
+  const rawParts: Array<{ text?: string }> = candidate?.content?.parts ?? [];
+  const allText = rawParts.map((p) => p.text ?? "").join("").trim();
+
+  if (!allText || finishReason === "MAX_TOKENS" || finishReason === "SAFETY") {
+    const hour = new Date().getHours();
+    const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+    const fallback = `${greeting}! What would you like to accomplish today?`;
+    console.warn(
+      `[synthesis/greeting] Unusable response, falling back. finishReason=${finishReason}, text=${allText.slice(0, 40)}`
+    );
+    return NextResponse.json({ openingMessage: fallback });
+  }
+
+  return NextResponse.json({ openingMessage: allText });
 }
 
 // ---------------------------------------------------------------------------

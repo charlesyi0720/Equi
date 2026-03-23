@@ -555,7 +555,6 @@ function DashboardContent() {
 
   const gridColForDayIdx = (dayIdx: number) => dayIdx + 2; // +2 because col 1 is time labels, col 2+ are days
   const gridRowForHour = (h: number) => h + 2; // +2 because row 1 is header, row 2 = hour 0
-  const gridRowEndForHour = (h: number) => h + 2;
 
   const focusPeakStart = 10;
   const focusPeakEnd = 13;
@@ -662,7 +661,7 @@ function DashboardContent() {
   };
 
   const uniqueVisualEvents = Array.from(
-    new Map(calendarEvents.map((e) => [`${e.dayIdx}-${e.start}`, e])).values()
+    new Map(calendarEvents.map((e) => [e.id, e])).values()
   );
 
   return (
@@ -728,8 +727,8 @@ function DashboardContent() {
                           : "max-w-[85%] rounded-2xl rounded-bl-md border border-gray-200 bg-white px-4 py-3 text-slate-800 shadow-[0_1px_4px_rgba(0,0,0,0.05)]"
                       }
                     >
-                      {m.content.split("💡 [SCHEDULE_UPDATE]")[0].trim()}
-                      {m.content.includes("💡 [SCHEDULE_UPDATE]") && (
+                      {m.content.replace(/\s*💡 \[SCHEDULE_UPDATE:[^\]]*\]/g, "").trim()}
+                      {/💡 \[SCHEDULE_UPDATE:/i.test(m.content) && (
                         <button
                           onClick={() => {
                             const match = m.content.match(/\[SCHEDULE_UPDATE:\s*(.*?)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(.*?)\]/i);
@@ -935,10 +934,7 @@ function DashboardContent() {
                     if (!Number.isFinite(event.dayIdx) || !Number.isFinite(event.start) || !Number.isFinite(event.end)) {
                       return null;
                     }
-                    const colStart = gridColForDayIdx(event.dayIdx);
-                    const rowStart = gridRowForHour(Math.floor(event.start));
-                    const rowEnd = gridRowEndForHour(Math.floor(event.start)) + 1;
-                    if (!Number.isFinite(colStart) || !Number.isFinite(rowStart) || !Number.isFinite(rowEnd)) {
+                    if (!Number.isFinite(colStart)) {
                       return null;
                     }
                     return (
@@ -953,10 +949,7 @@ function DashboardContent() {
                         gridColumnStart: colStart,
                         gridColumnEnd: colStart + 1,
                         gridRowStart: Math.floor(event.start) + 2,
-                        gridRowEnd: Math.floor(event.start) + 3,
-                        marginTop: `${(event.start % 1) * hourRowHeight}px`,
-                        height: `${(event.end - event.start) * hourRowHeight}px`,
-                        position: "relative",
+                        gridRowEnd: Math.floor(event.end) + 2,
                       }}
                     >
                       <div className={`font-semibold line-clamp-2 leading-tight ${!event.isFixed ? "flex items-center gap-1.5 text-slate-800" : "text-slate-700"}`}>
