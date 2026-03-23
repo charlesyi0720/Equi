@@ -102,6 +102,88 @@ interface Message {
   timestamp: Date;
 }
 
+interface CalendarGridEvent {
+  id: string;
+  title: string;
+  dayIdx: number;
+  start: number;
+  end: number;
+  isFixed: boolean;
+}
+
+/** Matches machine-readable schedule line; supports ASCII and fullwidth pipe. */
+const SCHEDULE_UPDATE_LINE_RE =
+  /\[SCHEDULE_UPDATE:\s*([^\|\n\r\uFF5C]+?)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*([^\]\s\n\r]+)/i;
+
+function parseScheduleUpdateFromText(text: string): { title: string; dayIdx: number; start: number; end: number } | null {
+  const match = text.match(SCHEDULE_UPDATE_LINE_RE);
+  if (!match) return null;
+  const [, titleRaw, startStr, endStr, dayRaw] = match;
+  const start = parseInt(startStr, 10);
+  const end = parseInt(endStr, 10);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+  const dayMap: Record<string, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
+  const key = dayRaw.trim().toLowerCase().substring(0, 3);
+  const dayIdx = dayMap[key];
+  if (dayIdx === undefined) return null;
+  return { title: titleRaw.trim(), dayIdx, start, end };
+}
+
+function normalizeTitleForMerge(title: string): string {
+  return title.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function titlesLikelySame(a: string, b: string): boolean {
+  const na = normalizeTitleForMerge(a);
+  const nb = normalizeTitleForMerge(b);
+  if (!na || !nb) return na === nb;
+  if (na === nb) return true;
+  const minLen = Math.min(na.length, nb.length);
+  if (minLen < 8) return false;
+  const prefixLen = Math.min(14, minLen);
+  return na.slice(0, prefixLen) === nb.slice(0, prefixLen);
+}
+
+function intervalsOverlapOrTouch(a: CalendarGridEvent, b: CalendarGridEvent, touchEps = 1e-3): boolean {
+  const lo = Math.max(a.start, b.start);
+  const hi = Math.min(a.end, b.end);
+  if (lo < hi - 1e-6) return true;
+  if (Math.abs(a.end - b.start) < touchEps) return true;
+  if (Math.abs(b.end - a.start) < touchEps) return true;
+  return false;
+}
+
+/** Merge duplicate / overlapping slots for the same course on the same day so we only side-by-side when truly different activities clash. */
+function mergeCalendarEventsForDisplay(events: CalendarGridEvent[]): CalendarGridEvent[] {
+  const byDay = new Map<number, CalendarGridEvent[]>();
+  for (const ev of events) {
+    const list = byDay.get(ev.dayIdx) ?? [];
+    list.push(ev);
+    byDay.set(ev.dayIdx, list);
+  }
+  const out: CalendarGridEvent[] = [];
+  for (const [, dayEvs] of Array.from(byDay)) {
+    const sorted = [...dayEvs].sort((a, b) => a.start - b.start || a.end - b.end);
+    const stack: CalendarGridEvent[] = [];
+    for (const ev of sorted) {
+      const last = stack[stack.length - 1];
+      if (last && titlesLikelySame(last.title, ev.title) && intervalsOverlapOrTouch(last, ev)) {
+        last.start = Math.min(last.start, ev.start);
+        last.end = Math.max(last.end, ev.end);
+        if (normalizeTitleForMerge(ev.title).length > normalizeTitleForMerge(last.title).length) {
+          last.title = ev.title;
+        }
+        last.id = `${last.id}~${ev.id}`;
+        last.isFixed = last.isFixed && ev.isFixed;
+      } else {
+        stack.push({ ...ev });
+      }
+    }
+    out.push(...stack);
+  }
+  return out;
+}
+
 // ============================================================================
 // SKELETON LOADER COMPONENTS
 // ============================================================================
@@ -186,6 +268,7 @@ function DashboardContent() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isMountedRef = useRef(true);
   const calendarScrollRef = useRef<HTMLDivElement>(null);
+  const [calendarDetail, setCalendarDetail] = useState<CalendarGridEvent | null>(null);
 
   const handleLogout = async () => {
     await signOut();
@@ -478,6 +561,21 @@ function DashboardContent() {
           prev.map((m, i) => i === prev.length - 1 ? { ...m, content: assistantMessage.content } : m)
         );
       }
+
+      const scheduleParsed = parseScheduleUpdateFromText(assistantMessage.content);
+      if (scheduleParsed) {
+        setCalendarEvents((prev) => [
+          ...prev,
+          {
+            id: `auto-${assistantMessage.id}-${Date.now()}`,
+            title: scheduleParsed.title,
+            dayIdx: scheduleParsed.dayIdx,
+            start: scheduleParsed.start,
+            end: scheduleParsed.end,
+            isFixed: false,
+          },
+        ]);
+      }
     } catch (error) {
       console.error("Error sending message:", error);
       const errorMessage: Message = {
@@ -517,6 +615,15 @@ function DashboardContent() {
       return () => clearTimeout(timer);
     }
   }, [isLoading]);
+
+  useEffect(() => {
+    if (!calendarDetail) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCalendarDetail(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [calendarDetail]);
 
   if (isLoading) {
     return <DashboardSkeleton />;
@@ -646,6 +753,21 @@ function DashboardContent() {
           prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantMessage.content } : m))
         );
       }
+
+      const scheduleParsed = parseScheduleUpdateFromText(assistantMessage.content);
+      if (scheduleParsed) {
+        setCalendarEvents((prev) => [
+          ...prev,
+          {
+            id: `auto-${assistantMessage.id}-${Date.now()}`,
+            title: scheduleParsed.title,
+            dayIdx: scheduleParsed.dayIdx,
+            start: scheduleParsed.start,
+            end: scheduleParsed.end,
+            isFixed: false,
+          },
+        ]);
+      }
     } catch (error: any) {
       console.error("Error sending message:", error?.message || error);
       const errorMessage: Message = {
@@ -660,14 +782,14 @@ function DashboardContent() {
     }
   };
 
-  const uniqueVisualEvents = Array.from(
-    new Map(calendarEvents.map((e) => [e.id, e])).values()
+  const uniqueVisualEvents = mergeCalendarEventsForDisplay(
+    Array.from(new Map(calendarEvents.map((e) => [e.id, e])).values()) as CalendarGridEvent[]
   );
 
-  // Compute overlapping lanes per event: { laneIndex, laneCount }
+  // Compute overlapping lanes per event: { laneIndex, laneCount } (after merging same-title overlaps)
   const eventLaneMap: Map<string, { laneIndex: number; laneCount: number }> = new Map();
   {
-    const byDay: Map<number, typeof calendarEvents> = new Map();
+    const byDay: Map<number, CalendarGridEvent[]> = new Map();
     for (const ev of uniqueVisualEvents) {
       if (!Number.isFinite(ev.dayIdx)) continue;
       const list = byDay.get(ev.dayIdx) ?? [];
@@ -755,22 +877,19 @@ function DashboardContent() {
                       }
                     >
                       {m.content.replace(/\s*💡?\s*\[SCHEDULE_UPDATE\]:[^\n]*/g, "").trim()}
-                      {/\[SCHEDULE_UPDATE:/i.test(m.content) && (
+                      {parseScheduleUpdateFromText(m.content) && (
                         <button
                           onClick={() => {
-                            const match = m.content.match(/\[SCHEDULE_UPDATE:\s*([^\|\n]+?)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*([^\]\s\n]+)/i);
-                            if (!match) return alert("Failed to parse AI schedule tag.");
-                            const [_, title, start, end, day] = match;
-                            const dayMap: Record<string, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
-                            const dayIdx = dayMap[day.trim().toLowerCase().substring(0, 3)] ?? new Date().getDay() - 1;
+                            const parsed = parseScheduleUpdateFromText(m.content);
+                            if (!parsed) return alert("Failed to parse AI schedule tag.");
                             setCalendarEvents((prev) => [
                               ...prev,
                               {
                                 id: `dynamic-${Date.now()}`,
-                                title: title.trim(),
-                                dayIdx,
-                                start: parseInt(start),
-                                end: parseInt(end),
+                                title: parsed.title,
+                                dayIdx: parsed.dayIdx,
+                                start: parsed.start,
+                                end: parsed.end,
                                 isFixed: false,
                               },
                             ]);
@@ -968,10 +1087,22 @@ function DashboardContent() {
                     const lane = eventLaneMap.get(event.id);
                     const laneIndex = lane?.laneIndex ?? 0;
                     const laneCount = lane?.laneCount ?? 1;
+                    const isNarrow = laneCount > 1;
                     return (
                     <div
                       key={event.id}
-                      className={`z-10 rounded-2xl px-2 py-1.5 text-xs text-slate-900 overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.12)] ${
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setCalendarDetail(event)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setCalendarDetail(event);
+                        }
+                      }}
+                      className={`z-10 rounded-2xl px-2 py-1.5 text-xs text-slate-900 overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.12)] cursor-pointer transition-transform duration-200 ease-out hover:z-[15] hover:shadow-[0_4px_16px_rgba(0,0,0,0.14)] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/80 ${
+                        isNarrow ? "hover:scale-[1.03] active:scale-[0.99]" : "hover:scale-[1.01]"
+                      } ${
                         event.isFixed
                           ? "border border-gray-200 bg-white"
                           : "border border-dashed border-gray-300 bg-white"
@@ -1005,6 +1136,44 @@ function DashboardContent() {
           </div>
         </div>
       </div>
+
+      {calendarDetail && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/45 px-4 py-8 backdrop-blur-[2px]"
+          role="presentation"
+          onClick={() => setCalendarDetail(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cal-detail-title"
+            className="w-full max-w-md rounded-2xl border border-gray-100 bg-white p-6 shadow-2xl animate-[fade-up_0.25s_ease-out]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div id="cal-detail-title" className="text-lg font-semibold text-slate-900 leading-snug">
+              {calendarDetail.title}
+            </div>
+            <div className="mt-3 text-sm text-slate-500">
+              {days[calendarDetail.dayIdx] ?? "Day"} &middot;{" "}
+              {hourLabel(Math.floor(calendarDetail.start))} &ndash;{" "}
+              {hourLabel(Math.ceil(calendarDetail.end))}
+            </div>
+            {!calendarDetail.isFixed && (
+              <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800">
+                <SparkleIcon />
+                Copilot suggestion
+              </div>
+            )}
+            <button
+              type="button"
+              className="mt-6 w-full rounded-xl bg-slate-900 py-2.5 text-sm font-medium text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              onClick={() => setCalendarDetail(null)}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
