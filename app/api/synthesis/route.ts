@@ -92,13 +92,13 @@ const BREVITY_INSTRUCTIONS = `
 `;
 
 const SCHEDULE_UPDATE_MARKER =
-  "💡 [SCHEDULE_UPDATE]";
+  "💡 [SCHEDULE_UPDATE]:";
 
 const SCHEDULE_INSTRUCTIONS = `
 
 [Schedule Suggestion Output Format]
 - When you suggest modifying the user's schedule, include the machine-readable tag ON ITS OWN LINE at the END of your response:
-  ${SCHEDULE_UPDATE_MARKER}: Event Title | startHour | endHour | day
+  ${SCHEDULE_UPDATE_MARKER} Event Title | startHour | endHour | day
   Example: 💡 [SCHEDULE_UPDATE]: Deep Work Block | 14 | 16 | wed
 - Field definitions: title (plain text, no pipes), startHour (integer 0-23), endHour (integer 0-23, must be greater than startHour), day (3-letter lowercase: mon/tue/wed/thu/fri/sat/sun).
 - Do NOT put any other text on that same line. The frontend will NOT apply updates without this exact line.

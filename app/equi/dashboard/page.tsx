@@ -674,7 +674,7 @@ function DashboardContent() {
       list.push(ev);
       byDay.set(ev.dayIdx, list);
     }
-    for (const [, evs] of byDay) {
+    for (const [, evs] of Array.from(byDay)) {
       const sorted = [...evs].sort((a, b) => a.start - b.start);
       const laneEnds: number[] = [];
       for (const ev of sorted) {
@@ -754,11 +754,11 @@ function DashboardContent() {
                           : "max-w-[85%] rounded-2xl rounded-bl-md border border-gray-200 bg-white px-4 py-3 text-slate-800 shadow-[0_1px_4px_rgba(0,0,0,0.05)]"
                       }
                     >
-                      {m.content.replace(/\s*💡?\s*\[SCHEDULE_UPDATE:[^\]]*\]/g, "").trim()}
+                      {m.content.replace(/\s*💡?\s*\[SCHEDULE_UPDATE\]:[^\n]*/g, "").trim()}
                       {/\[SCHEDULE_UPDATE:/i.test(m.content) && (
                         <button
                           onClick={() => {
-                            const match = m.content.match(/\[SCHEDULE_UPDATE:\s*(.*?)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*([^\]\s]+)\]/i);
+                            const match = m.content.match(/\[SCHEDULE_UPDATE:\s*([^\|\n]+?)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*([^\]\s\n]+)/i);
                             if (!match) return alert("Failed to parse AI schedule tag.");
                             const [_, title, start, end, day] = match;
                             const dayMap: Record<string, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
