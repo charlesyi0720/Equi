@@ -403,10 +403,17 @@ async function handleRagChat(body: SynthesisBody, userId: string): Promise<NextR
   const ragContext = buildRagContext(matchedKnowledge);
   const systemPrompt = buildSystemPrompt(userData ?? {}, ragContext, timezone ?? "UTC", localTimeStr);
 
-  // Format conversation history (last MAX_HISTORY turns)
-  const historyParts = (conversationHistory ?? [])
+  // Format conversation history (last MAX_HISTORY turns); drop empty turns (invalid for Gemini).
+  let historyParts = (conversationHistory ?? [])
     .slice(-MAX_HISTORY)
-    .map((msg) => ({ role: msg.role, parts: [{ text: msg.content }] }));
+    .map((msg) => ({ role: msg.role, parts: [{ text: msg.content ?? "" }] }))
+    .filter((p) => (p.parts[0]?.text?.length ?? 0) > 0);
+
+  // Gemini requires the first Content to be from the user. Opening assistant-only greeting would
+  // otherwise yield [model, user] and cause API errors (502 on Vercel).
+  while (historyParts.length > 0 && historyParts[0].role === "model") {
+    historyParts = historyParts.slice(1);
+  }
 
   // Current user message must appear in `contents`. handleSubmit sends history WITHOUT the new turn;
   // submitQuickAction sends history that already includes the new user message — avoid duplicating.
@@ -416,6 +423,11 @@ async function handleRagChat(body: SynthesisBody, userId: string): Promise<NextR
   const contents = lastAlreadyThisUser
     ? historyParts
     : [...historyParts, { role: "user" as const, parts: [{ text: message }] }];
+
+  if (contents.length === 0) {
+    console.error("[synthesis/rag] contents empty after history strip");
+    return NextResponse.json({ error: "No valid messages to send" }, { status: 400 });
+  }
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -447,7 +459,11 @@ async function handleRagChat(body: SynthesisBody, userId: string): Promise<NextR
     async start(controller) {
       try {
         for await (const chunk of result.stream) {
-          controller.enqueue(encoder.encode(chunk.text()));
+          const piece =
+            typeof (chunk as { text?: () => string }).text === "function"
+              ? (chunk as { text: () => string }).text()
+              : "";
+          if (piece) controller.enqueue(encoder.encode(piece));
         }
       } catch (e) {
         console.error("[synthesis/rag] stream error:", e);

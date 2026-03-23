@@ -138,9 +138,12 @@ function titlesLikelySame(a: string, b: string): boolean {
   const nb = normalizeTitleForMerge(b);
   if (!na || !nb) return na === nb;
   if (na === nb) return true;
+  const short = na.length <= nb.length ? na : nb;
+  const long = na.length > nb.length ? na : nb;
+  if (short.length >= 6 && long.includes(short)) return true;
   const minLen = Math.min(na.length, nb.length);
-  if (minLen < 8) return false;
-  const prefixLen = Math.min(14, minLen);
+  if (minLen < 6) return false;
+  const prefixLen = Math.min(12, minLen);
   return na.slice(0, prefixLen) === nb.slice(0, prefixLen);
 }
 
