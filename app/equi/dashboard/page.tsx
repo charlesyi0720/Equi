@@ -154,6 +154,60 @@ function intervalsStrictlyOverlap(a: CalendarGridEvent, b: CalendarGridEvent): b
   return lo < hi - 1e-6;
 }
 
+/** Connected components by strict time overlap: events in different components never overlap, so each can use full column width. */
+function clusterEventsByTimeOverlap(dayEvs: CalendarGridEvent[]): CalendarGridEvent[][] {
+  const n = dayEvs.length;
+  if (n === 0) return [];
+  const adj: number[][] = Array.from({ length: n }, () => []);
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (intervalsStrictlyOverlap(dayEvs[i], dayEvs[j])) {
+        adj[i].push(j);
+        adj[j].push(i);
+      }
+    }
+  }
+  const visited = new Array(n).fill(false);
+  const clusters: CalendarGridEvent[][] = [];
+  for (let i = 0; i < n; i++) {
+    if (visited[i]) continue;
+    const comp: CalendarGridEvent[] = [];
+    const stack = [i];
+    visited[i] = true;
+    while (stack.length > 0) {
+      const u = stack.pop()!;
+      comp.push(dayEvs[u]);
+      for (const v of adj[u]) {
+        if (!visited[v]) {
+          visited[v] = true;
+          stack.push(v);
+        }
+      }
+    }
+    clusters.push(comp);
+  }
+  return clusters;
+}
+
+/** Greedy lane packing within one overlap cluster only (laneCount is never inflated by unrelated events on the same day). */
+function assignLanesInCluster(comp: CalendarGridEvent[]): Map<string, { laneIndex: number; laneCount: number }> {
+  const sorted = [...comp].sort((a, b) => a.start - b.start || a.end - b.end);
+  const laneEnds: number[] = [];
+  const map = new Map<string, { laneIndex: number; laneCount: number }>();
+  for (const ev of sorted) {
+    const occupied = laneEnds.findIndex((end) => end <= ev.start);
+    const lane = occupied >= 0 ? occupied : laneEnds.length;
+    laneEnds[lane] = ev.end;
+    map.set(ev.id, { laneIndex: lane, laneCount: 0 });
+  }
+  const total = laneEnds.length;
+  for (const ev of sorted) {
+    const prev = map.get(ev.id)!;
+    map.set(ev.id, { ...prev, laneCount: total });
+  }
+  return map;
+}
+
 /** Merge duplicate overlapping slots for the same course on the same day (e.g. two ICS rows for 12–2 and 13–15). Adjacent slots are not merged. */
 function mergeCalendarEventsForDisplay(events: CalendarGridEvent[]): CalendarGridEvent[] {
   const byDay = new Map<number, CalendarGridEvent[]>();
@@ -787,7 +841,7 @@ function DashboardContent() {
     Array.from(new Map(calendarEvents.map((e) => [e.id, e])).values()) as CalendarGridEvent[]
   );
 
-  // Compute overlapping lanes per event: { laneIndex, laneCount } (after merging same-title overlaps)
+  // Lanes only among events that overlap in time (same connected component). Non-overlapping events stay full width.
   const eventLaneMap: Map<string, { laneIndex: number; laneCount: number }> = new Map();
   {
     const byDay: Map<number, CalendarGridEvent[]> = new Map();
@@ -798,18 +852,11 @@ function DashboardContent() {
       byDay.set(ev.dayIdx, list);
     }
     for (const [, evs] of Array.from(byDay)) {
-      const sorted = [...evs].sort((a, b) => a.start - b.start);
-      const laneEnds: number[] = [];
-      for (const ev of sorted) {
-        const occupied = laneEnds.findIndex((end) => end <= ev.start);
-        const lane = occupied >= 0 ? occupied : laneEnds.length;
-        laneEnds[lane] = ev.end;
-        eventLaneMap.set(ev.id, { laneIndex: lane, laneCount: 0 });
-      }
-      const total = laneEnds.length;
-      for (const ev of sorted) {
-        const prev = eventLaneMap.get(ev.id)!;
-        eventLaneMap.set(ev.id, { ...prev, laneCount: total });
+      for (const comp of clusterEventsByTimeOverlap(evs)) {
+        const local = assignLanesInCluster(comp);
+        for (const [id, info] of Array.from(local)) {
+          eventLaneMap.set(id, info);
+        }
       }
     }
   }

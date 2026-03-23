@@ -67,7 +67,8 @@ interface MatchedKnowledge {
 }
 
 const EMBEDDING_MODEL = "gemini-embedding-001";
-const CHAT_MODEL = "gemini-2.5-flash";
+/** Gemini 3.1 Flash-Lite (preview) — cost/latency friendly for high-volume chat. */
+const CHAT_MODEL = "gemini-3.1-flash-lite-preview";
 const MAX_HISTORY = 10;   // keep last 10 turns for context
 const MATCH_COUNT = 3;   // top-K knowledge chunks to retrieve
 
