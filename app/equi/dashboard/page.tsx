@@ -934,6 +934,7 @@ function DashboardContent() {
                     if (!Number.isFinite(event.dayIdx) || !Number.isFinite(event.start) || !Number.isFinite(event.end)) {
                       return null;
                     }
+                    const colStart = gridColForDayIdx(event.dayIdx);
                     if (!Number.isFinite(colStart)) {
                       return null;
                     }
