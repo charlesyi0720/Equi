@@ -109,7 +109,8 @@ export async function POST(req: NextRequest) {
             if (!Array.isArray(values)) {
               throw new Error(`Unexpected response shape for chunk ${idx}`);
             }
-            return values as number[];
+            // gemini-embedding-001 returns 3072-dim; truncate to 768 to match pgvector schema
+            return (values as number[]).slice(0, 768);
           })
         );
 

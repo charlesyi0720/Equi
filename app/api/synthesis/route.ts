@@ -289,7 +289,8 @@ async function embedMessage(message: string): Promise<number[]> {
   if (!Array.isArray(values)) {
     throw new Error(`Unexpected embedding response: ${JSON.stringify(data).slice(0, 100)}`);
   }
-  return values as number[];
+  // Truncate to 768 to match pgvector schema
+  return (values as number[]).slice(0, 768);
 }
 
 // ---------------------------------------------------------------------------
