@@ -744,6 +744,8 @@ function DashboardContent() {
 
     const { name, mbti, biologicalClock, preferredAgentPersona } = userData.understanding || {};
     const sid = sessionId ?? currentSessionIdRef.current;
+    const allChunks = generateUserContextChunks(userData);
+    const fixedActivitiesSummary = allChunks[3] ?? "";
 
     try {
       if (!supabase) return;
@@ -770,6 +772,7 @@ function DashboardContent() {
             focusPeaks: biologicalClock?.focusPeaks,
             energyDips: biologicalClock?.energyDips,
             preferredAgentPersona,
+            fixedActivitiesSummary,
           },
         }),
       });

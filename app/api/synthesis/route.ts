@@ -2,7 +2,7 @@
  * Synthesis API Route — RAG-enabled Conversational AI
  *
  * Data flow per POST /api/synthesis:
- *   Step A: Embed user message → Gemini text-embedding-004 (768-dim)
+ *   Step A: Embed user message → Gemini text-embedding-004 REST API (768-dim)
  *   Step B: Semantic search   → Supabase RPC match_equi_knowledge (top-3)
  *   Step C: Inject knowledge  → Enhanced system prompt → Gemini generateContent
  *
@@ -68,7 +68,7 @@ interface MatchedKnowledge {
   similarity: number;
 }
 
-const EMBEDDING_MODEL = "text-embedding-004";
+const EMBEDDING_MODEL = "models/text-embedding-004";
 /** Gemini 3.1 Flash-Lite (preview) — cost/latency friendly for high-volume chat. */
 const CHAT_MODEL = "gemini-3.1-flash-lite-preview";
 const MAX_HISTORY = 10;   // keep last 10 turns for context
@@ -252,17 +252,40 @@ function buildSystemPrompt(
 }
 
 // ---------------------------------------------------------------------------
-// Step A: Embed user message with Gemini text-embedding-004
+// Step A: Embed user message with Gemini REST API (matches embed/route.ts)
 // ---------------------------------------------------------------------------
 
 async function embedMessage(message: string): Promise<number[]> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: EMBEDDING_MODEL });
-  const result = await model.embedContent(message);
-  return result.embedding.values as number[];
+  const url =
+    `https://generativelanguage.googleapis.com/v1/${EMBEDDING_MODEL}:embedContent?key=${apiKey}`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: EMBEDDING_MODEL,
+      content: { parts: [{ text: message }] },
+      taskType: "SEMANTIC_SIMILARITY",
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Embedding API ${res.status}: ${errText}`);
+  }
+
+  const data = await res.json() as {
+    embedding?: { values?: number[] };
+    embeddingValues?: number[];
+  };
+  const values = data.embedding?.values ?? data.embeddingValues;
+  if (!Array.isArray(values)) {
+    throw new Error(`Unexpected embedding response: ${JSON.stringify(data).slice(0, 100)}`);
+  }
+  return values as number[];
 }
 
 // ---------------------------------------------------------------------------

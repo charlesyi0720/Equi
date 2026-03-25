@@ -2,7 +2,7 @@
  * POST /api/embed
  *
  * Embeds an array of natural-language chunks into Supabase pgvector via
- * Gemini text-embedding-004 (768-dim), then upserts them into the equi_knowledge table.
+ * Gemini embedding REST API (768-dim), then upserts them into the equi_knowledge table.
  *
  * Table contract (confirmed via probing):
  *   user_id   UUID     NOT NULL REFERENCES auth.users(id)
@@ -12,11 +12,16 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabaseAdmin } from "../../equi/lib/supabase";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const EMBEDDING_MODEL = "text-embedding-004";
+
+/** Primary embedding model — 768-dim, widely supported. */
+const PRIMARY_MODEL = "models/text-embedding-004";
+/** Fallback model if primary fails. */
+const FALLBACK_MODEL = "models/embedding-001";
+
+const EMBEDDING_MODELS = [PRIMARY_MODEL, FALLBACK_MODEL] as const;
 
 // Chunk-type labels used in metadata, aligned with semanticParser chunk order
 const CHUNK_TYPE_LABELS = [
@@ -35,7 +40,7 @@ export async function GET() {
   return NextResponse.json({
     status: "ok",
     service: "embed",
-    embeddingModel: EMBEDDING_MODEL,
+    models: EMBEDDING_MODELS,
   });
 }
 
@@ -83,27 +88,83 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 4. Parallel embedding via Gemini gemini-embedding-001
-  let embeddingResults: number[][];
-  try {
-    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: EMBEDDING_MODEL });
+  // 4. Embed each chunk via Gemini REST API with per-model retry
+  const embeddingResults: number[][] = [];
+  const MAX_RETRIES_PER_MODEL = 2;
 
-    embeddingResults = await Promise.all(
-      chunks.map(async (chunk) => {
-        const result = await model.embedContent(chunk);
-        return result.embedding.values as number[];
-      })
-    );
-  } catch (err) {
-    console.error("[embed] Gemini embedding failed:", err);
+  for (const model of EMBEDDING_MODELS) {
+    try {
+      for (let attempt = 0; attempt <= MAX_RETRIES_PER_MODEL; attempt++) {
+        try {
+          const results = await Promise.all(
+            chunks.map(async (chunk) => {
+              const apiRes = await fetch(
+                `https://generativelanguage.googleapis.com/v1/${model}:embedContent?key=${GEMINI_API_KEY}`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    model,
+                    content: { parts: [{ text: chunk }] },
+                    taskType: "SEMANTIC_SIMILARITY",
+                  }),
+                }
+              );
+
+              if (!apiRes.ok) {
+                const errText = await apiRes.text();
+                throw new Error(`Gemini API ${apiRes.status}: ${errText}`);
+              }
+
+              const data = await apiRes.json() as {
+                embedding?: { values?: number[] };
+                embeddingValues?: number[];
+              };
+              const values = data.embedding?.values ?? data.embeddingValues;
+              if (!Array.isArray(values)) {
+                throw new Error(`Unexpected embedding response shape: ${JSON.stringify(data).slice(0, 200)}`);
+              }
+              return values as number[];
+            })
+          );
+
+          // All chunks succeeded with this model
+          embeddingResults.push(...results);
+          console.log(`[embed] Successfully embedded ${results.length} chunks with model: ${model}`);
+          break; // exit retry loop, move to next chunk
+        } catch (chunkErr) {
+          const isLast = attempt === MAX_RETRIES_PER_MODEL;
+          console.error(`[embed] Model=${model} attempt ${attempt + 1} failed for chunk batch:`, chunkErr);
+          if (isLast && model === EMBEDDING_MODELS[EMBEDDING_MODELS.length - 1]) {
+            // All models exhausted
+            return NextResponse.json(
+              { error: "Embedding generation failed" },
+              { status: 502 }
+            );
+          }
+          if (isLast) {
+            // Try next model
+            console.warn(`[embed] All retries exhausted for ${model}, trying next model...`);
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+        }
+      }
+    } catch {
+      // Move to next model
+    }
+    if (embeddingResults.length === chunks.length) break;
+  }
+
+  if (embeddingResults.length !== chunks.length) {
+    console.error(`[embed] Only embedded ${embeddingResults.length}/${chunks.length} chunks`);
     return NextResponse.json(
       { error: "Embedding generation failed" },
       { status: 502 }
     );
   }
 
-  // 5. Verify all vectors are 768-dimensional
+  // 5. Verify all vectors are 768-dimensional (pgvector schema requires vector(768))
   const malformed = embeddingResults.findIndex((v) => v.length !== 768);
   if (malformed !== -1) {
     console.error(`[embed] Chunk[${malformed}] returned ${embeddingResults[malformed].length} dims, expected 768`);
@@ -152,7 +213,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       userId,
       chunksStored: chunks.length,
-      dimensions: 768,
+      dimensions: embeddingResults[0]?.length ?? 768,
     },
     { status: 201 }
   );
