@@ -98,13 +98,29 @@ const SCHEDULE_UPDATE_MARKER =
 const SCHEDULE_INSTRUCTIONS = `
 
 [Schedule Suggestion Output Format]
-- When you suggest modifying the user's schedule, include the machine-readable tag ON ITS OWN LINE at the END of your response:
+- Whenever you confirm adding, moving, or reserving a concrete calendar block (or tell the user you updated their schedule), you MUST include the machine-readable tag ON ITS OWN LINE at the END of your response — even if the rest of your reply is in Chinese or another language.
+- Tag format (ASCII pipes only):
   ${SCHEDULE_UPDATE_MARKER} Event Title | startHour | endHour | day [| YYYY-MM-DD]
-  Example: 💡 [SCHEDULE_UPDATE]: Deep Work Block | 14 | 16 | wed
-  Example with one-off date: 💡 [SCHEDULE_UPDATE]: Microeconomics Lecture | 13 | 15 | wed | 2026-03-25
-- Field definitions: title (plain text, MUST NOT contain the pipe character | or line breaks—use a comma in the title if needed), startHour (integer 0-23), endHour (integer 0-23, must be greater than startHour), day (3-letter lowercase: mon/tue/wed/thu/fri/sat/sun). The optional 5th field (YYYY-MM-DD) means this event occurs on that ONE date only; omit it if the event recurs every week on that day.
-- Do NOT put any other text on that same line. The app parses this line automatically when your reply finishes; the user may also tap "Apply to Calendar" if shown.
-- Do NOT add this tag to non-scheduling responses.
+  Examples:
+  💡 [SCHEDULE_UPDATE]: Deep Work Block | 14 | 16 | wed
+  💡 [SCHEDULE_UPDATE]: Macroeconomics homework | 14 | 15 | wed | 2026-03-25
+- Title: plain text, MUST NOT contain | or line breaks.
+- startHour/endHour: integers 0-23 (24-hour), endHour > startHour.
+- day: mon/tue/wed/thu/fri/sat/sun (English, lowercase).
+- If the block is for "today", always include the 5th field YYYY-MM-DD using today's date given in the prompt (so it does not repeat every week).
+- Do NOT put any other text on that tag line. Nothing may follow that line.
+- Do NOT add this tag when you are only giving general advice without placing a specific block.
+`;
+
+/** Extra system text when the user message clearly asks for a time block — overrides models skipping the tag. */
+const SCHEDULE_TAG_MANDATORY_APPENDIX = (todayIso: string) => `
+
+[CALENDAR SYNC — MANDATORY FOR THIS REQUEST]
+The user is asking to place or change a specific time on their calendar.
+After your normal reply in their language, you MUST append exactly one final line with NO text after it:
+${SCHEDULE_UPDATE_MARKER} <short title> | <startHour> | <endHour> | <mon..sun> | ${todayIso}
+Use 24-hour hours. Match the day-of-week to ${todayIso} unless they explicitly said another day (then adjust day + date).
+If you cannot honor the request, omit the tag and explain why — do not claim you updated the calendar without the tag.
 `;
 
 function buildRagContext(matches: MatchedKnowledge[]): string {
@@ -122,11 +138,43 @@ function buildRagContext(matches: MatchedKnowledge[]): string {
   );
 }
 
+function todayIsoInTimeZone(timeZone: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: timeZone || "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+  } catch {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+}
+
+function isLikelyScheduleRequest(message: string): boolean {
+  const m = message.trim();
+  if (!m) return false;
+  if (
+    /点|上午|下午|晚上|半夜|午间|am\b|pm\b|:\d{2}\b|日程|日历|安排|预约|空出|focus|assignment|作业|专注|block|calendar|schedule(\s|$)|time block|book\b/i.test(
+      m
+    )
+  ) {
+    return true;
+  }
+  if (/\d{1,2}\s*[-–至到~\uff5e]\s*\d{1,2}/.test(m)) return true;
+  return false;
+}
+
 function buildSystemPrompt(
   userData: SynthesisBody["userData"],
   ragContext: string,
   timezone: string,
-  localTimeStr?: string
+  localTimeStr?: string,
+  scheduleTagMandatory?: boolean
 ): string {
   const { mbti, name, focusPeaks, energyDips, todaySchedule, preferredAgentPersona } =
     userData ?? {};
@@ -172,8 +220,12 @@ function buildSystemPrompt(
   const languageRule =
     "CRITICAL RULE: You MUST respond entirely in the language the user is currently typing in (e.g., reply in English if the user types in English. DO NOT force Chinese).";
 
+  const todayIso = todayIsoInTimeZone(tz);
+  const scheduleMandatoryBlock = scheduleTagMandatory ? SCHEDULE_TAG_MANDATORY_APPENDIX(todayIso) : "";
+
   return [
     `The user's current local time is: ${localTimeStr ?? serverTimeStr}. Adjust your greetings and scheduling suggestions strictly to match this time of day. Never say "Good morning" when it is clearly evening or night.`,
+    `Today's date in the user's timezone (${tz}) for calendar tags is: ${todayIso}.`,
     nameLine,
     personaInstruction,
     personaIntro,
@@ -184,6 +236,7 @@ function buildSystemPrompt(
     TONE_INSTRUCTIONS,
     BREVITY_INSTRUCTIONS,
     SCHEDULE_INSTRUCTIONS,
+    scheduleMandatoryBlock,
     ragContext,
     languageRule,
   ]

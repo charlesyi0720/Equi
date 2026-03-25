@@ -148,6 +148,137 @@ function parseScheduleUpdateFromText(
   return { title: titleRaw.trim(), dayIdx, start, end, isoDate: isoDate ?? undefined };
 }
 
+function mondayBasedDayIndex(d: Date): number {
+  const dow = d.getDay();
+  return dow === 0 ? 6 : dow - 1;
+}
+
+function formatLocalIsoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function normalizeDigitsForParse(s: string): string {
+  return s.replace(/\u3000/g, " ").replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
+}
+
+function pmHour(h: number): number {
+  if (h >= 1 && h <= 11) return h + 12;
+  if (h === 12) return 12;
+  return h;
+}
+
+/** Parse Chinese / plain time ranges when the model omits [SCHEDULE_UPDATE]: line. */
+function extractCnEnTimeRange(text: string): { start: number; end: number } | null {
+  const pmIdx = text.search(/下午/);
+  if (pmIdx >= 0) {
+    const slice = text.slice(pmIdx, Math.min(text.length, pmIdx + 56));
+    let m = slice.match(/(\d{1,2})\s*[-–至到～~]\s*(\d{1,2})\s*点/);
+    if (m) {
+      return { start: pmHour(parseInt(m[1], 10)), end: pmHour(parseInt(m[2], 10)) };
+    }
+    m = slice.match(/(\d{1,2})\s*点\s*至\s*(\d{1,2})\s*点/);
+    if (m) {
+      return { start: pmHour(parseInt(m[1], 10)), end: pmHour(parseInt(m[2], 10)) };
+    }
+  }
+  const amIdx = text.search(/上午|早上/);
+  if (amIdx >= 0) {
+    const slice = text.slice(amIdx, Math.min(text.length, amIdx + 56));
+    const m =
+      slice.match(/(\d{1,2})\s*[-–至到～~]\s*(\d{1,2})\s*点/) ??
+      slice.match(/(\d{1,2})\s*点\s*至\s*(\d{1,2})\s*点/);
+    if (m) {
+      const a = parseInt(m[1], 10);
+      const b = parseInt(m[2], 10);
+      return { start: a, end: b };
+    }
+  }
+  let m = text.match(/\b(\d{1,2}):00\s*[-–]\s*(\d{1,2}):00\b/);
+  if (m) return { start: parseInt(m[1], 10), end: parseInt(m[2], 10) };
+  m = text.match(/\b(\d{1,2})\s*[-–]\s*(\d{1,2})\s*点\b/);
+  if (m) {
+    const a = parseInt(m[1], 10);
+    const b = parseInt(m[2], 10);
+    if (a >= 8 && b <= 23 && b > a) return { start: a, end: b };
+    if (a >= 1 && a <= 11 && b >= 1 && b <= 12 && b > a) {
+      return { start: pmHour(a), end: pmHour(b) };
+    }
+  }
+  return null;
+}
+
+function cnWeekCharToIdx(c: string): number | undefined {
+  const map: Record<string, number> = { 一: 0, 二: 1, 三: 2, 四: 3, 五: 4, 六: 5, 日: 6, 天: 6 };
+  return map[c];
+}
+
+function resolveDayFromText(text: string, ref: Date): { dayIdx: number; isoDate?: string } {
+  if (/后天/.test(text)) {
+    const d = new Date(ref);
+    d.setDate(d.getDate() + 2);
+    return { dayIdx: mondayBasedDayIndex(d), isoDate: formatLocalIsoDate(d) };
+  }
+  if (/明天|翌日/.test(text)) {
+    const d = new Date(ref);
+    d.setDate(d.getDate() + 1);
+    return { dayIdx: mondayBasedDayIndex(d), isoDate: formatLocalIsoDate(d) };
+  }
+  const wm = text.match(/周([一二三四五六日天])/);
+  if (wm) {
+    const idx = cnWeekCharToIdx(wm[1]);
+    if (idx !== undefined) return { dayIdx: idx };
+  }
+  return { dayIdx: mondayBasedDayIndex(ref), isoDate: formatLocalIsoDate(ref) };
+}
+
+function extractSessionTitle(user: string, assistant: string): string | null {
+  const u = user.replace(/\s+/g, " ");
+  let m = u.match(/focus\s+on\s+(.+?)$/i);
+  if (m) return m[1].trim();
+  m = u.match(/(?:关于|做|完成)\s*([^\n，。！？]{2,40})/);
+  if (m) return m[1].trim();
+  m = assistant.match(/(?:将|把)([^，,]{2,32}?)(?:安排|放在)/);
+  if (m) return m[1].trim();
+  return null;
+}
+
+/** Fallback when the assistant replies in Chinese (or prose) without the machine-readable tag. */
+function inferScheduleFromConversation(
+  userMessage: string,
+  assistantMessage: string,
+  now: Date
+): { title: string; dayIdx: number; start: number; end: number; isoDate?: string } | null {
+  const combined = normalizeDigitsForParse(`${userMessage}\n${assistantMessage}`);
+  const assistantConfirms =
+    /已(?:为|将)?您|已更新|更新了日程|安排在|加在|日程已经|为您更新|我已经/i.test(assistantMessage) ||
+    /calendar|scheduled|I\s*(?:'ve| have)\s+(?:scheduled|added|blocked|put)/i.test(assistantMessage);
+  const userWantsBlock =
+    /要|帮我|添加|安排|空出|focus|block|schedule|assignment|作业|学习|专注/i.test(userMessage);
+  if (!assistantConfirms && !userWantsBlock) return null;
+
+  const hours = extractCnEnTimeRange(combined);
+  if (!hours) return null;
+  const { start, end } = hours;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+
+  const { dayIdx, isoDate } = resolveDayFromText(combined, now);
+  const title = extractSessionTitle(userMessage, assistantMessage) ?? "Focus block";
+  const cleanTitle = title.replace(/\s+/g, " ").trim().slice(0, 80);
+  if (!cleanTitle) return null;
+  return { title: cleanTitle, dayIdx, start, end, isoDate };
+}
+
+function resolveScheduleFromReply(
+  userMessage: string,
+  assistantMessage: string,
+  now: Date
+): { title: string; dayIdx: number; start: number; end: number; isoDate?: string } | null {
+  return parseScheduleUpdateFromText(assistantMessage) ?? inferScheduleFromConversation(userMessage, assistantMessage, now);
+}
+
 function normalizeTitleForMerge(title: string): string {
   return title.toLowerCase().replace(/\s+/g, " ").trim();
 }
@@ -752,7 +883,11 @@ function DashboardContent() {
         );
       }
 
-      const scheduleParsed = parseScheduleUpdateFromText(assistantMessage.content);
+      const scheduleParsed = resolveScheduleFromReply(
+        userMessage.content,
+        assistantMessage.content,
+        new Date()
+      );
       if (scheduleParsed) {
         await persistAgentEvent({
           id: `auto-${assistantMessage.id}-${Date.now()}`,
@@ -1016,7 +1151,11 @@ function DashboardContent() {
         );
       }
 
-      const scheduleParsed = parseScheduleUpdateFromText(assistantMessage.content);
+      const scheduleParsed = resolveScheduleFromReply(
+        userMessage.content,
+        assistantMessage.content,
+        new Date()
+      );
       if (scheduleParsed) {
         await persistAgentEvent({
           id: `auto-${assistantMessage.id}-${Date.now()}`,
@@ -1139,7 +1278,15 @@ function DashboardContent() {
             <div className="px-6 py-5">
               <div className="overflow-y-auto rounded-2xl border border-gray-100 bg-gray-50/60 p-4 text-sm text-slate-700 shadow-[inset_0_1px_3px_rgba(0,0,0,0.04)]" style={{ height: "calc(100vh - 360px)" }}>
                 <div className="space-y-3.5">
-                  {messages.map((m) => (
+                  {messages.map((m, i) => {
+                    const prev = i > 0 ? messages[i - 1] : null;
+                    const pairedUserContent =
+                      m.role === "assistant" && prev?.role === "user" ? prev.content : "";
+                    const scheduleForUi =
+                      m.role === "assistant"
+                        ? resolveScheduleFromReply(pairedUserContent, m.content, new Date())
+                        : null;
+                    return (
                     <div
                       key={m.id}
                       className={
@@ -1149,11 +1296,16 @@ function DashboardContent() {
                       }
                     >
                       {stripScheduleUpdateLines(m.content)}
-                      {parseScheduleUpdateFromText(m.content) && (
+                      {scheduleForUi && (
                         <button
+                          type="button"
                           onClick={() => {
-                            const parsed = parseScheduleUpdateFromText(m.content);
-                            if (!parsed) return alert("Failed to parse AI schedule tag.");
+                            const parsed = resolveScheduleFromReply(
+                              pairedUserContent,
+                              m.content,
+                              new Date()
+                            );
+                            if (!parsed) return alert("Failed to parse schedule from this message.");
                             const newEvent = {
                               id: `dynamic-${Date.now()}`,
                               title: parsed.title,
@@ -1181,7 +1333,8 @@ function DashboardContent() {
                         </button>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                   <div ref={messagesEndRef} />
                 </div>
               </div>
