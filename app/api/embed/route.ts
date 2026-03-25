@@ -10,8 +10,10 @@ import { supabaseAdmin } from "../../equi/lib/supabase";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-const PRIMARY_MODEL = "models/text-embedding-004";
-const FALLBACK_MODEL = "models/embedding-001";
+/** Primary embedding model — 768-dim, confirmed supported for embedContent in v1beta. */
+const PRIMARY_MODEL = "gemini-embedding-001";
+/** Fallback: newer preview model. */
+const FALLBACK_MODEL = "gemini-embedding-2-preview";
 
 const CHUNK_TYPE_LABELS = [
   "persona_summary",
@@ -39,8 +41,6 @@ export async function GET() {
 // ---------------------------------------------------------------------------
 
 export async function POST(req: NextRequest) {
-  console.log("[embed] POST received");
-
   // 1. Parse body
   let body: { userId?: string; chunks?: string[] };
   try {
@@ -50,7 +50,6 @@ export async function POST(req: NextRequest) {
   }
 
   const { userId, chunks } = body;
-  console.log(`[embed] userId=${userId}, chunks=${chunks?.length}`);
 
   if (!userId || typeof userId !== "string") {
     return NextResponse.json({ error: "userId is required" }, { status: 400 });
@@ -61,7 +60,7 @@ export async function POST(req: NextRequest) {
 
   // 2. Validate environment
   if (!GEMINI_API_KEY) {
-    console.error("[embed] GEMINI_API_KEY is not set in environment");
+    console.error("[embed] GEMINI_API_KEY is not set");
     return NextResponse.json({ error: "GEMINI_API_KEY missing from environment" }, { status: 500 });
   }
   if (!supabaseAdmin) {
@@ -69,64 +68,67 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Database client misconfigured" }, { status: 500 });
   }
 
-  // 3. Embed each chunk
+  // 3. Embed each chunk — try models in order, 3 retries each
   const embeddingResults: number[][] = [];
   const modelsToTry = [PRIMARY_MODEL, FALLBACK_MODEL];
 
   for (const model of modelsToTry) {
-    console.log(`[embed] Trying model=${model}`);
     let attempt = 0;
 
     while (attempt < 3) {
       attempt++;
-      console.log(`[embed] Attempt ${attempt} for model=${model}`);
 
       try {
         const results = await Promise.all(
-          chunks.map(async (chunk, idx) => {
+          chunks.map(async (_chunk, idx) => {
+            // Correct URL: v1beta/models/{model}:embedContent
             const url =
-              `https://generativelanguage.googleapis.com/v1beta2/${model}:embedContent?key=${GEMINI_API_KEY}`;
+              `https://generativelanguage.googleapis.com/v1beta/models/${model}:embedContent?key=${GEMINI_API_KEY}`;
 
             const apiRes = await fetch(url, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                model,
-                content: { parts: [{ text: chunk }] },
+                model: `models/${model}`,
+                content: { parts: [{ text: _chunk }] },
                 taskType: "SEMANTIC_SIMILARITY",
               }),
             });
 
             if (!apiRes.ok) {
               const errText = await apiRes.text();
-              throw new Error(`Gemini API ${apiRes.status}: ${errText.slice(0, 300)}`);
+              throw new Error(`API ${apiRes.status}: ${errText.slice(0, 200)}`);
             }
 
             const data = await apiRes.json() as {
               embedding?: { values?: number[] };
               embeddingValues?: number[];
+              predictions?: Array<{ embedding?: { values?: number[] } }>;
             };
-            const values = data.embedding?.values ?? data.embeddingValues;
+
+            const values =
+              data.embedding?.values ??
+              data.embeddingValues ??
+              data.predictions?.[0]?.embedding?.values;
+
             if (!Array.isArray(values)) {
-              throw new Error(`No values in embedding response for chunk ${idx}`);
+              throw new Error(`Unexpected response shape for chunk ${idx}: ${JSON.stringify(data).slice(0, 100)}`);
             }
             return values as number[];
           })
         );
 
-        // Success
+        // All chunks succeeded with this model
         embeddingResults.push(...results);
-        console.log(`[embed] ✓ Model=${model} succeeded, ${results.length} chunks embedded`);
+        console.log(`[embed] ✓ model=${model} succeeded, ${results.length} chunks`);
         break;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[embed] ✗ Attempt ${attempt} failed: ${msg.slice(0, 300)}`);
+        console.error(`[embed] ✗ model=${model} attempt ${attempt} failed: ${msg}`);
         if (attempt >= 3) {
-          // Try next model
           console.warn(`[embed] All attempts exhausted for ${model}, trying next model...`);
           break;
         }
-        // Wait before retry
         await new Promise((r) => setTimeout(r, 1000 * attempt));
       }
     }
@@ -135,7 +137,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (embeddingResults.length !== chunks.length) {
-    console.error(`[embed] All models exhausted — only got ${embeddingResults.length}/${chunks.length} embeddings`);
+    console.error(`[embed] All models exhausted — only got ${embeddingResults.length}/${chunks.length}`);
     return NextResponse.json({ error: "Embedding generation failed" }, { status: 502 });
   }
 
@@ -144,25 +146,23 @@ export async function POST(req: NextRequest) {
   if (badDim !== -1) {
     console.error(`[embed] Chunk[${badDim}] dim=${embeddingResults[badDim].length}, expected 768`);
     return NextResponse.json(
-      { error: `Dimension mismatch at chunk ${badDim}: got ${embeddingResults[badDim].length}` },
+      { error: `Dimension mismatch at chunk ${badDim}` },
       { status: 502 }
     );
   }
 
-  // 5. Delete old rows
-  console.log(`[embed] Deleting old rows for user=${userId}`);
+  // 5. Delete old rows for idempotency
   const { error: deleteError } = await supabaseAdmin!
     .from("equi_knowledge")
     .delete()
     .eq("user_id", userId);
 
   if (deleteError) {
-    console.error("[embed] Delete failed:", deleteError);
+    console.error("[embed] Delete old rows failed:", deleteError);
     return NextResponse.json({ error: "Failed to clear previous knowledge data" }, { status: 500 });
   }
 
   // 6. Batch insert
-  console.log(`[embed] Inserting ${embeddingResults.length} rows`);
   const rows = embeddingResults.map((embedding, i) => ({
     user_id: userId,
     content: chunks[i],
@@ -179,6 +179,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Failed to store embeddings" }, { status: 500 });
   }
 
-  console.log(`[embed] ✓ Done — ${rows.length} rows stored`);
+  console.log(`[embed] ✓ Done — ${rows.length} rows stored for user=${userId}`);
   return NextResponse.json({ ok: true, userId, chunksStored: rows.length, dimensions: 768 }, { status: 201 });
 }

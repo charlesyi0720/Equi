@@ -68,7 +68,7 @@ interface MatchedKnowledge {
   similarity: number;
 }
 
-const EMBEDDING_MODEL = "models/text-embedding-004";
+const EMBEDDING_MODEL = "gemini-embedding-001";
 /** Gemini 3.1 Flash-Lite (preview) — cost/latency friendly for high-volume chat. */
 const CHAT_MODEL = "gemini-3.1-flash-lite-preview";
 const MAX_HISTORY = 10;   // keep last 10 turns for context
@@ -260,13 +260,13 @@ async function embedMessage(message: string): Promise<number[]> {
   if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
 
   const url =
-    `https://generativelanguage.googleapis.com/v1/${EMBEDDING_MODEL}:embedContent?key=${apiKey}`;
+    `https://generativelanguage.googleapis.com/v1beta/models/${EMBEDDING_MODEL}:embedContent?key=${apiKey}`;
 
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: EMBEDDING_MODEL,
+      model: `models/${EMBEDDING_MODEL}`,
       content: { parts: [{ text: message }] },
       taskType: "SEMANTIC_SIMILARITY",
     }),
@@ -280,8 +280,12 @@ async function embedMessage(message: string): Promise<number[]> {
   const data = await res.json() as {
     embedding?: { values?: number[] };
     embeddingValues?: number[];
+    predictions?: Array<{ embedding?: { values?: number[] } }>;
   };
-  const values = data.embedding?.values ?? data.embeddingValues;
+  const values =
+    data.embedding?.values ??
+    data.embeddingValues ??
+    data.predictions?.[0]?.embedding?.values;
   if (!Array.isArray(values)) {
     throw new Error(`Unexpected embedding response: ${JSON.stringify(data).slice(0, 100)}`);
   }
