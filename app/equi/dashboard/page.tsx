@@ -297,8 +297,8 @@ function inferScheduleFromConversation(
 ): { title: string; dayIdx: number; start: number; end: number; isoDate?: string } | null {
   const combined = normalizeDigitsForParse(`${userMessage}\n${assistantMessage}`);
   const assistantConfirms =
-    /已(?:为|将)?您|已更新|更新了日程|安排在|加在|日程已经|为您更新|我已经/i.test(assistantMessage) ||
-    /calendar|scheduled|I\s*(?:'ve| have)\s+(?:scheduled|added|blocked|put|registered|confirmed)/i.test(
+    /已(?:为|将)?您|已更新|更新了日程|安排在|加在|日程已经|为您更新|我已经|我会把|我会帮|我帮您/i.test(assistantMessage) ||
+    /calendar|scheduled|I\s*(?:'ve| have| will| can)?\s*(?:scheduled|added|blocked|put|registered|confirmed|place)/i.test(
       assistantMessage
     ) ||
     /officially\s+registered|have\s+officially|registered\s+your/i.test(assistantMessage);
@@ -788,6 +788,7 @@ function DashboardContent() {
     const sid = sessionId ?? currentSessionIdRef.current;
     const allChunks = generateUserContextChunks(userData);
     const fixedActivitiesSummary = allChunks[3] ?? "";
+    const flexibleActivitiesSummary = allChunks[4] ?? "";
 
     try {
       if (!supabase) return;
@@ -815,6 +816,7 @@ function DashboardContent() {
             energyDips: biologicalClock?.energyDips,
             preferredAgentPersona,
             fixedActivitiesSummary,
+            flexibleActivitiesSummary,
           },
         }),
       });
@@ -876,6 +878,7 @@ function DashboardContent() {
 
     const allChunks = userData ? generateUserContextChunks(userData) : [];
     const fixedActivitiesSummary = allChunks[3] ?? "";
+    const flexibleActivitiesSummary = allChunks[4] ?? "";
 
     const userContext = {
       name: userData?.understanding?.name,
@@ -884,6 +887,7 @@ function DashboardContent() {
       energyDips: userData?.understanding?.biologicalClock?.energyDips,
       preferredAgentPersona: userData?.understanding?.preferredAgentPersona,
       fixedActivitiesSummary,
+      flexibleActivitiesSummary,
     };
 
     try {
@@ -1144,6 +1148,7 @@ function DashboardContent() {
 
     const allChunks = userData ? generateUserContextChunks(userData) : [];
     const fixedActivitiesSummary = allChunks[3] ?? "";
+    const flexibleActivitiesSummary = allChunks[4] ?? "";
 
     const userContext = {
       name: userData?.understanding?.name,
@@ -1152,6 +1157,7 @@ function DashboardContent() {
       energyDips: userData?.understanding?.biologicalClock?.energyDips,
       preferredAgentPersona: userData?.understanding?.preferredAgentPersona,
       fixedActivitiesSummary,
+      flexibleActivitiesSummary,
     };
 
     try {

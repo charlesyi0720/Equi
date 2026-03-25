@@ -59,6 +59,8 @@ interface SynthesisMessage {
     preferredAgentPersona?: string;
     /** Human-readable summary of the user's fixed activities (gym, class, etc.). */
     fixedActivitiesSummary?: string;
+    /** Human-readable summary of the user's flexible/floating activities (gym daily quota, etc.). */
+    flexibleActivitiesSummary?: string;
   };
 }
 
@@ -178,7 +180,7 @@ function buildSystemPrompt(
   localTimeStr?: string,
   scheduleTagMandatory?: boolean
 ): string {
-  const { mbti, name, focusPeaks, energyDips, todaySchedule, preferredAgentPersona, fixedActivitiesSummary } =
+  const { mbti, name, focusPeaks, energyDips, todaySchedule, preferredAgentPersona, fixedActivitiesSummary, flexibleActivitiesSummary } =
     userData ?? {};
 
   const tz = timezone || "UTC";
@@ -223,6 +225,10 @@ function buildSystemPrompt(
     ? `[Fixed Activities — DO NOT schedule over these without the user's explicit consent]\n${fixedActivitiesSummary}`
     : "";
 
+  const flexibleActivitiesLine = flexibleActivitiesSummary
+    ? `[Flexible/Floating Activities — these have no fixed slot; schedule them when convenient or during focus peaks]\n${flexibleActivitiesSummary}`
+    : "";
+
   const languageRule =
     "CRITICAL RULE: You MUST respond entirely in the language the user is currently typing in (e.g., reply in English if the user types in English. DO NOT force Chinese).";
 
@@ -240,6 +246,7 @@ function buildSystemPrompt(
     dipLine,
     scheduleLine,
     fixedActivitiesLine,
+    flexibleActivitiesLine,
     TONE_INSTRUCTIONS,
     BREVITY_INSTRUCTIONS,
     SCHEDULE_INSTRUCTIONS,

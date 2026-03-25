@@ -163,6 +163,8 @@ function parseFixedActivities(user: EquiUser): string {
   const lines: string[] = [`${name} 每周的固定日程如下：`];
 
   for (const activity of activities) {
+    if (activity.activityType === "flexibleFloating") continue; // handled separately
+
     const categoryText = CATEGORY_LABELS[activity.category] ?? activity.category;
     const typeText = ACTIVITY_TYPE_LABELS[activity.activityType] ?? activity.activityType;
     const constraintText = activity.isHardConstraint ? "不可调整的硬约束" : "建议保护但可协商";
@@ -184,6 +186,36 @@ function parseFixedActivities(user: EquiUser): string {
 
     lines.push(
       `${activity.label} 在 ${slotDescs}（${typeText}，${constraintText}），属于「${categoryText}」类活动${locationNote}。${notesNote}`
+    );
+  }
+
+  return lines.join(" ");
+}
+
+function parseFlexibleActivities(user: EquiUser): string {
+  const { name } = user.understanding;
+  const flexible = (user.lifeStructure?.fixedActivities ?? []).filter(
+    (a) => a.activityType === "flexibleFloating"
+  );
+
+  if (flexible.length === 0) {
+    return `${name} 尚未设置任何弹性浮动活动。`;
+  }
+
+  const lines: string[] = [`${name} 的弹性浮动活动（灵活安排，无需固定时段）如下：`];
+
+  for (const activity of flexible) {
+    const quota = activity.flexibleQuota;
+    const minsPerDay = quota?.dailyMinutes ?? 0;
+    const preferred = quota?.preferredSlot ?? "anytime";
+    const slotLabel = preferred === "focusPeaks" ? "优先安排在专注力高峰期" : preferred === "anytime" ? "任意时段均可" : preferred;
+
+    const categoryText = CATEGORY_LABELS[activity.category] ?? activity.category;
+    const dailyStr = minsPerDay > 0 ? `每天目标 ${Math.round(minsPerDay / 60 * 10) / 10} 小时` : "";
+    const locationNote = activity.location ? `，地点为 ${activity.location}` : "";
+
+    lines.push(
+      `【${activity.label}】${dailyStr}（${slotLabel}），属于「${categoryText}」类${locationNote}。`
     );
   }
 
@@ -231,6 +263,7 @@ export function generateUserContextChunks(userData: EquiUser): string[] {
   chunks.push(parsePersonalityAnalysis(userData));
   chunks.push(parseBiologicalClock(userData));
   chunks.push(parseFixedActivities(userData));
+  chunks.push(parseFlexibleActivities(userData));
   chunks.push(parseLifeModeContext(userData));
 
   return chunks.filter((c) => c.length > 0);
