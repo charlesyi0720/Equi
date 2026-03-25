@@ -493,34 +493,42 @@ function DashboardContent() {
   }, [userData]);
 
   // ---------------------------------------------------------------------------
-  // Persist a new agent event to Supabase + local state so it survives page reload.
+  // Persist a new agent event to Supabase via server route (bypasses RLS).
   // ---------------------------------------------------------------------------
   const persistAgentEvent = async (newEvent: { id: string; title: string; dayIdx: number; start: number; end: number; isoDate?: string }) => {
-    const updated: typeof newEvent[] = [...agentCalendarEvents, newEvent];
-    setAgentCalendarEvents(updated);
+    // 1. Optimistically update local state immediately.
+    setAgentCalendarEvents((prev) => [...prev, newEvent]);
 
     if (!userData) return;
-    const merged: EquiUser = {
-      ...userData,
-      calendarAgentEvents: [
-        ...(userData.calendarAgentEvents ?? []),
-        { ...newEvent, createdAt: new Date().toISOString() },
-      ],
-    };
 
-    // Update local state so the useMemo recalculates if needed.
+    const newAgentEvents = [
+      ...(userData.calendarAgentEvents ?? []),
+      { ...newEvent, createdAt: new Date().toISOString() },
+    ];
+
+    const merged: EquiUser = { ...userData, calendarAgentEvents: newAgentEvents };
+
+    // 2. Update local React state so the useMemo re-derives the calendar display.
     setUserData(merged);
 
-    // Persist to Supabase.  If RLS blocks it we silently continue — the in-session
-    // state is already updated and will survive React re-renders.
+    // 3. Persist through server-side API (uses service role key, no RLS issues).
     if (!supabase) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const { error } = await supabase
-      .from("profiles")
-      .update({ user_data: merged })
-      .eq("id", user.id);
-    if (error) console.warn("[persistAgentEvent] Supabase write failed:", error.message);
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) return;
+
+    const res = await fetch("/api/profile", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ user_data: merged }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.warn("[persistAgentEvent] Server write failed:", err.error);
+    }
   };
 
   const generateOpeningMessage = async () => {
@@ -948,13 +956,25 @@ function DashboardContent() {
             <div className="font-medium tracking-wide uppercase text-[11px] text-slate-400 letter-spacing-wider">
               Executive Copilot &middot; Weekly view
             </div>
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-600 hover:bg-gray-50 hover:text-slate-900 transition-colors duration-200 cursor-pointer"
-            >
-              <LogoutIcon />
-              Logout
-            </button>
+            <div className="flex items-center gap-2">
+              <a
+                href="/equi/settings"
+                className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-600 hover:bg-gray-50 hover:text-slate-900 transition-colors duration-200 cursor-pointer"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+                </svg>
+                Settings
+              </a>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-600 hover:bg-gray-50 hover:text-slate-900 transition-colors duration-200 cursor-pointer"
+              >
+                <LogoutIcon />
+                Logout
+              </button>
+            </div>
           </div>
         </div>
 
