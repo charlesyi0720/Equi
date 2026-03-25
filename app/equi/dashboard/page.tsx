@@ -92,6 +92,12 @@ class ErrorBoundary extends React.Component<
 }
 
 // ============================================================================
+// CONSTANTS
+// ============================================================================
+
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+
+// ============================================================================
 // TYPES
 // ============================================================================
 
@@ -455,7 +461,7 @@ function DashboardContent() {
           if (seen.has(uid)) continue;
           seen.add(uid);
           const shortDay = weekdayToShort[slot.day] || slot.day;
-          const dayIdx = days.indexOf(shortDay as typeof days[number]);
+          const dayIdx = DAYS.indexOf(shortDay as typeof DAYS[number]);
           if (dayIdx < 0) continue;
           const start = (slot.startHour ?? 0) + ((slot.startMinute ?? 0) / 60);
           const end   = (slot.endHour   ?? 0) + ((slot.endMinute   ?? 0) / 60);
@@ -740,8 +746,6 @@ function DashboardContent() {
   }
 
   const name = userData?.understanding?.name || "User";
-
-  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
   // Week column dates: Monday of the current week (using local time) as ISO strings.
   const userTz = typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "UTC";
@@ -1124,7 +1128,7 @@ function DashboardContent() {
                   <div className="border-b border-r border-gray-100 bg-gray-50/40 sticky top-0 z-10" />
 
                   {/* Day headers - sticky */}
-                  {days.map((d, idx) => (
+                  {DAYS.map((d, idx) => (
                     <div
                       key={d}
                       className="sticky top-0 z-10 flex flex-col items-center justify-center border-b border-r border-gray-100 bg-white text-[11px] font-semibold text-slate-600 tracking-wide"
@@ -1145,7 +1149,7 @@ function DashboardContent() {
                       >
                         {hourLabel(h)}
                       </div>
-                      {days.map((_, dayIdx) => {
+                      {DAYS.map((_, dayIdx) => {
                         const isPeak = h >= focusPeakStart && h < focusPeakEnd;
                         const isDip = h >= dipStart;
                         const baseClass = "border-b border-r border-gray-100";
@@ -1270,7 +1274,7 @@ function DashboardContent() {
               {calendarDetail.title}
             </div>
             <div className="mt-3 text-sm text-slate-500">
-              {days[calendarDetail.dayIdx] ?? "Day"} &middot;{" "}
+              {DAYS[calendarDetail.dayIdx] ?? "Day"} &middot;{" "}
               {hourLabel(Math.floor(calendarDetail.start))} &ndash;{" "}
               {hourLabel(Math.ceil(calendarDetail.end))}
             </div>
