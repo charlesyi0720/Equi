@@ -217,6 +217,23 @@ export interface EquiUser {
   agentBrain: AgentBrain;
   /** One-off events added by the AI copilot or user (e.g. a one-time lecture). */
   calendarAgentEvents?: CalendarAgentEvent[];
+  /** All conversation sessions. Each entry is a thread of messages. */
+  conversationSessions?: ConversationSession[];
+  /** The session currently being shown on the dashboard (if any). */
+  activeSessionId?: string;
+}
+
+export interface ConversationSession {
+  id: string;
+  createdAt: string;
+  messages: StoredMessage[];
+}
+
+export interface StoredMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: string; // ISO string
 }
 
 /** A one-off or recurring event added by the AI. */

@@ -521,17 +521,34 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Save feedback */}
+      {/* Animated toast — fixed at bottom-center, slides up */}
       {saveMsg && (
-        <div className={`mx-auto max-w-2xl px-6 pt-4`}>
-          <div
-            className={`rounded-xl px-4 py-3 text-sm font-medium ${
-              saveMsg.type === "success"
-                ? "bg-emerald-50 border border-emerald-200 text-emerald-700"
-                : "bg-rose-50 border border-rose-200 text-rose-700"
-            }`}
-          >
-            {saveMsg.text}
+        <div
+          className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-50 animate-toast-in ${
+            saveMsg.type === "success"
+              ? "rounded-2xl border border-emerald-200 bg-emerald-50 px-6 py-3 shadow-[0_4px_24px_rgba(16,185,129,0.2)]"
+              : "rounded-2xl border border-rose-200 bg-rose-50 px-6 py-3 shadow-[0_4px_24px_rgba(244,63,94,0.15)]"
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${
+                saveMsg.type === "success" ? "bg-emerald-100 text-emerald-600" : "bg-rose-100 text-rose-600"
+              }`}
+            >
+              {saveMsg.type === "success" ? (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              ) : (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              )}
+            </div>
+            <span className={`text-sm font-semibold ${saveMsg.type === "success" ? "text-emerald-800" : "text-rose-800"}`}>
+              {saveMsg.text}
+            </span>
           </div>
         </div>
       )}

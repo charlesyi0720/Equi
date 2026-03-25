@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo, FormEvent } from "react";
-import { EquiUser } from "../types";
+import { EquiUser, StoredMessage, ConversationSession } from "../types";
 import { supabase } from "../lib/supabase";
 import { onAuthStateChange, signOut } from "../lib/auth";
 
@@ -101,12 +101,8 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 // TYPES
 // ============================================================================
 
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: Date;
-}
+/** StoredMessage uses ISO string timestamps (persisted to Supabase). */
+type Message = StoredMessage;
 
 interface CalendarGridEvent {
   id: string;
@@ -334,7 +330,12 @@ function DashboardContent() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isMountedRef = useRef(true);
   const calendarScrollRef = useRef<HTMLDivElement>(null);
+  const messagesSnapshotRef = useRef<Message[]>([]);
   const [calendarDetail, setCalendarDetail] = useState<CalendarGridEvent | null>(null);
+  const [showResumeDialog, setShowResumeDialog] = useState(false);
+  const [pendingSession, setPendingSession] = useState<ConversationSession | null>(null);
+  const currentSessionIdRef = useRef<string | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   const handleLogout = async () => {
     await signOut();
@@ -342,6 +343,49 @@ function DashboardContent() {
   };
 
   // ============================================================================
+  // Persist the active session's messages to Supabase via server API.
+  const persistSession = async (sessionId: string, msgs: Message[]) => {
+    if (!userData || !supabase) return;
+    const sessions: ConversationSession[] = [
+      ...(userData.conversationSessions ?? []).filter((s) => s.id !== sessionId),
+      { id: sessionId, createdAt: new Date().toISOString(), messages: msgs },
+    ];
+    const merged: EquiUser = {
+      ...userData,
+      conversationSessions: sessions,
+      activeSessionId: sessionId,
+    };
+    setUserData(merged);
+    currentSessionIdRef.current = sessionId;
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) return;
+    await fetch("/api/profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ user_data: merged }),
+    }).catch(() => {});
+  };
+
+  // Start a brand-new conversation session.
+  const startNewSession = async () => {
+    const newId = Math.random().toString(36).substring(2, 11);
+    currentSessionIdRef.current = newId;
+    setActiveSessionId(newId);
+    setMessages([]);
+    setShowResumeDialog(false);
+    await generateOpeningMessage(newId);
+  };
+
+  // Resume a previous session.
+  const continueSession = (session: ConversationSession) => {
+    currentSessionIdRef.current = session.id;
+    setActiveSessionId(session.id);
+    setMessages(session.messages);
+    setShowResumeDialog(false);
+  };
+
   // CLEAN FETCH: Pure Supabase calls without localStorage hacks
   // ============================================================================
   const initializeDashboard = async (retryCount = 0) => {
@@ -383,7 +427,18 @@ function DashboardContent() {
 
       // 4. Success - set user data from cloud
       if (isMountedRef.current) {
-        setUserData(profile.user_data as EquiUser);
+        const ud = profile.user_data as EquiUser;
+        setUserData(ud);
+
+        // Check if there's a previous session to offer resume
+        const activeId = ud.activeSessionId;
+        if (activeId) {
+          const prevSession = (ud.conversationSessions ?? []).find((s) => s.id === activeId);
+          if (prevSession && prevSession.messages.length > 0) {
+            setPendingSession(prevSession);
+            setShowResumeDialog(true);
+          }
+        }
         setIsLoading(false);
       }
 
@@ -436,12 +491,17 @@ function DashboardContent() {
     }
   }, [messages]);
 
-  // Auto-trigger opening message
+  // Keep snapshot ref in sync so async persistSession reads fresh messages.
   useEffect(() => {
-    if (userData && messages.length === 0) {
-      generateOpeningMessage();
+    messagesSnapshotRef.current = messages;
+  }, [messages]);
+
+  // Auto-trigger opening message (only when no resume dialog is pending)
+  useEffect(() => {
+    if (userData && messages.length === 0 && !showResumeDialog) {
+      startNewSession();
     }
-  }, [userData]);
+  }, [userData, showResumeDialog]);
 
   // Derive fixed events from userData (memoised so agent events are never clobbered).
   const fixedCalendarEvents = useMemo(() => {
@@ -531,10 +591,11 @@ function DashboardContent() {
     }
   };
 
-  const generateOpeningMessage = async () => {
+  const generateOpeningMessage = async (sessionId?: string) => {
     if (!userData) return;
 
     const { name, mbti, biologicalClock, preferredAgentPersona } = userData.understanding || {};
+    const sid = sessionId ?? currentSessionIdRef.current;
 
     try {
       if (!supabase) return;
@@ -575,10 +636,12 @@ function DashboardContent() {
         id: generateId(),
         role: "assistant",
         content: data.openingMessage || fallbackMsg,
-        timestamp: new Date(),
+        timestamp: new Date().toISOString(),
       };
 
-      setMessages([openingMessage]);
+      const msgs = [openingMessage];
+      setMessages(msgs);
+      if (sid) persistSession(sid, msgs);
     } catch (error) {
       console.error("Failed to generate opening message:", error);
       const browserHour = new Date().getHours();
@@ -588,9 +651,11 @@ function DashboardContent() {
         id: generateId(),
         role: "assistant",
         content: `${browserGreeting}. What would you like to accomplish today?`,
-        timestamp: new Date(),
+        timestamp: new Date().toISOString(),
       };
-      setMessages([fallbackMessage]);
+      const msgs = [fallbackMessage];
+      setMessages(msgs);
+      if (sid) persistSession(sid, msgs);
     }
   };
 
@@ -602,14 +667,16 @@ function DashboardContent() {
       id: generateId(),
       role: "user",
       content: inputValue.trim(),
-      timestamp: new Date(),
+      timestamp: new Date().toISOString(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setInputValue("");
     setIsStreaming(true);
 
-    const conversationHistory = [...messages, userMessage].map((m) => ({
+    // Use snapshot to avoid stale closure.
+    const currentMsgs = messagesSnapshotRef.current;
+    const conversationHistory = [...currentMsgs, userMessage].map((m) => ({
       role: m.role === "user" ? "user" : "model",
       content: m.content,
     }));
@@ -655,7 +722,7 @@ function DashboardContent() {
         id: generateId(),
         role: "assistant",
         content: "",
-        timestamp: new Date(),
+        timestamp: new Date().toISOString(),
       };
       
       setMessages((prev) => [...prev, assistantMessage]);
@@ -689,11 +756,14 @@ function DashboardContent() {
         id: generateId(),
         role: "assistant",
         content: "Sorry — I hit a snag. Please try again.",
-        timestamp: new Date(),
+        timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsStreaming(false);
+      // Persist updated session after every exchange (use snapshot to avoid stale closure).
+      const sid = currentSessionIdRef.current;
+      if (sid) persistSession(sid, messagesSnapshotRef.current);
     }
   };
 
@@ -738,6 +808,54 @@ function DashboardContent() {
 
   if (error) {
     return <ErrorDisplay message={error} onRetry={() => { setError(null); setIsLoading(true); initializeDashboard(); }} />;
+  }
+
+  if (showResumeDialog && pendingSession) {
+    const preview = pendingSession.messages[pendingSession.messages.length - 1];
+    const dateStr = new Date(pendingSession.createdAt).toLocaleDateString("en-US", {
+      month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+    });
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="w-full max-w-sm rounded-2xl bg-white border border-gray-100 shadow-[0_8px_40px_rgba(0,0,0,0.10)] p-8 text-center animate-[fade-up_0.3s_ease-out]">
+          {/* Avatar / icon */}
+          <div className="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center mx-auto text-amber-500 mb-5">
+            <SparkleIcon />
+          </div>
+          <h2 className="text-lg font-semibold text-slate-900 mb-1">Continue where you left off?</h2>
+          <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+            You have an unfinished conversation from {dateStr}.
+          </p>
+
+          {/* Last message preview */}
+          {preview && (
+            <div className="rounded-xl bg-gray-50 border border-gray-100 px-4 py-3 mb-6 text-left">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                Last message
+              </div>
+              <div className="text-sm text-slate-600 line-clamp-2 italic">
+                &ldquo;{preview.content}&rdquo;
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <button
+              onClick={() => continueSession(pendingSession)}
+              className="w-full rounded-xl bg-slate-900 py-3 text-sm font-semibold text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              Continue conversation
+            </button>
+            <button
+              onClick={startNewSession}
+              className="w-full rounded-xl border border-gray-200 bg-white py-3 text-sm font-semibold text-slate-700 hover:bg-gray-50 transition-colors cursor-pointer"
+            >
+              Start fresh
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (!userData) {
@@ -810,13 +928,15 @@ function DashboardContent() {
       id: generateId(),
       role: "user",
       content: text.trim(),
-      timestamp: new Date(),
+      timestamp: new Date().toISOString(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setIsStreaming(true);
 
-    const conversationHistory = [...messages, userMessage].map((m) => ({
+    // Use snapshot to avoid stale closure.
+    const currentMsgs = messagesSnapshotRef.current;
+    const conversationHistory = [...currentMsgs, userMessage].map((m) => ({
       role: m.role === "user" ? "user" : "model",
       content: m.content,
     }));
@@ -866,7 +986,7 @@ function DashboardContent() {
         id: generateId(),
         role: "assistant",
         content: "",
-        timestamp: new Date(),
+        timestamp: new Date().toISOString(),
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
@@ -900,11 +1020,13 @@ function DashboardContent() {
         id: generateId(),
         role: "assistant",
         content: `Sorry — I hit a snag: ${error?.message || "Unknown error"}. Please try again.`,
-        timestamp: new Date(),
+        timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsStreaming(false);
+      const sid = currentSessionIdRef.current;
+      if (sid) persistSession(sid, messagesSnapshotRef.current);
     }
   };
 
