@@ -211,6 +211,29 @@ function extractCnEnTimeRange(text: string): { start: number; end: number } | nu
       return { start: pmHour(a), end: pmHour(b) };
     }
   }
+  // "tomorrow morning at 10:00" / "at 10:00 AM"
+  m = text.match(/\bat\s+(\d{1,2}):(\d{2})\s*(AM|PM)?\b/i);
+  if (m) {
+    let h = parseInt(m[1], 10);
+    const mm = parseInt(m[2], 10) || 0;
+    const suf = m[3]?.toUpperCase();
+    if (suf === "PM" && h < 12) h += 12;
+    if (suf === "AM" && h === 12) h = 0;
+    if (!suf && /morning|早上|上午/i.test(text) && h >= 1 && h <= 11) {
+      // bare "10:00" after "morning" → AM
+    } else if (!suf && h >= 1 && h <= 11 && /afternoon|下午/i.test(text)) {
+      h = pmHour(h);
+    } else if (!suf && h >= 1 && h <= 11 && /evening|晚上|night/i.test(text)) {
+      h = pmHour(h);
+    }
+    const start = h + mm / 60;
+    return { start, end: start + 1 };
+  }
+  m = text.match(/\bmorning\s+at\s+(\d{1,2})(?::00)?\b/i);
+  if (m) {
+    const h = parseInt(m[1], 10);
+    if (h >= 1 && h <= 11) return { start: h, end: h + 1 };
+  }
   return null;
 }
 
@@ -230,6 +253,19 @@ function resolveDayFromText(text: string, ref: Date): { dayIdx: number; isoDate?
     d.setDate(d.getDate() + 1);
     return { dayIdx: mondayBasedDayIndex(d), isoDate: formatLocalIsoDate(d) };
   }
+  if (/\bday\s+after\s+tomorrow\b/i.test(text)) {
+    const d = new Date(ref);
+    d.setDate(d.getDate() + 2);
+    return { dayIdx: mondayBasedDayIndex(d), isoDate: formatLocalIsoDate(d) };
+  }
+  if (/\btomorrow\b/i.test(text)) {
+    const d = new Date(ref);
+    d.setDate(d.getDate() + 1);
+    return { dayIdx: mondayBasedDayIndex(d), isoDate: formatLocalIsoDate(d) };
+  }
+  if (/\btoday\b/i.test(text) || /\btonight\b/i.test(text)) {
+    return { dayIdx: mondayBasedDayIndex(ref), isoDate: formatLocalIsoDate(ref) };
+  }
   const wm = text.match(/周([一二三四五六日天])/);
   if (wm) {
     const idx = cnWeekCharToIdx(wm[1]);
@@ -246,6 +282,10 @@ function extractSessionTitle(user: string, assistant: string): string | null {
   if (m) return m[1].trim();
   m = assistant.match(/(?:将|把)([^，,]{2,32}?)(?:安排|放在)/);
   if (m) return m[1].trim();
+  m = assistant.match(/your\s+([a-zA-Z][^.!?\n]{1,48}?)\s+session/i);
+  if (m) return m[1].trim();
+  m = assistant.match(/(?:registered|booked|scheduled|placed)\s+(?:your\s+)?([a-zA-Z][^.!?\n]{1,48}?)(?:\s+for|\s+tom|\s+on|\.)/i);
+  if (m) return m[1].trim();
   return null;
 }
 
@@ -258,9 +298,14 @@ function inferScheduleFromConversation(
   const combined = normalizeDigitsForParse(`${userMessage}\n${assistantMessage}`);
   const assistantConfirms =
     /已(?:为|将)?您|已更新|更新了日程|安排在|加在|日程已经|为您更新|我已经/i.test(assistantMessage) ||
-    /calendar|scheduled|I\s*(?:'ve| have)\s+(?:scheduled|added|blocked|put)/i.test(assistantMessage);
+    /calendar|scheduled|I\s*(?:'ve| have)\s+(?:scheduled|added|blocked|put|registered|confirmed)/i.test(
+      assistantMessage
+    ) ||
+    /officially\s+registered|have\s+officially|registered\s+your/i.test(assistantMessage);
   const userWantsBlock =
-    /要|帮我|添加|安排|空出|focus|block|schedule|assignment|作业|学习|专注/i.test(userMessage);
+    /要|帮我|添加|安排|空出|focus|block|schedule|assignment|作业|学习|专注|apply\s*to\s*calendar|应用到日历/i.test(
+      userMessage
+    );
   if (!assistantConfirms && !userWantsBlock) return null;
 
   const hours = extractCnEnTimeRange(combined);
@@ -677,9 +722,6 @@ function DashboardContent() {
           events.push({ id: uid, title: activity.label || "Untitled", dayIdx, start, end, isFixed: true });
         }
       }
-    }
-    if (events.length === 0) {
-      events.push({ id: "placeholder-wed-deepwork", title: "Deep Work: Thesis", dayIdx: 2, start: 10, end: 13, isFixed: false });
     }
     return events;
   }, [userData]);
