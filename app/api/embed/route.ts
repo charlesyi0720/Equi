@@ -10,9 +10,9 @@ import { supabaseAdmin } from "../../equi/lib/supabase";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-/** Primary embedding model — 768-dim, confirmed supported for embedContent in v1beta. */
+/** Primary embedding model. */
 const PRIMARY_MODEL = "gemini-embedding-001";
-/** Fallback: newer preview model. */
+/** Fallback: newer 2-series model (returns 3072-dim). */
 const FALLBACK_MODEL = "gemini-embedding-2-preview";
 
 const CHUNK_TYPE_LABELS = [
@@ -41,7 +41,6 @@ export async function GET() {
 // ---------------------------------------------------------------------------
 
 export async function POST(req: NextRequest) {
-  // 1. Parse body
   let body: { userId?: string; chunks?: string[] };
   try {
     body = await req.json();
@@ -58,17 +57,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "chunks must be a non-empty string array" }, { status: 400 });
   }
 
-  // 2. Validate environment
   if (!GEMINI_API_KEY) {
-    console.error("[embed] GEMINI_API_KEY is not set");
     return NextResponse.json({ error: "GEMINI_API_KEY missing from environment" }, { status: 500 });
   }
   if (!supabaseAdmin) {
-    console.error("[embed] supabaseAdmin is null");
     return NextResponse.json({ error: "Database client misconfigured" }, { status: 500 });
   }
 
-  // 3. Embed each chunk — try models in order, 3 retries each
+  // Embed each chunk — try models in order, 3 retries each
   const embeddingResults: number[][] = [];
   const modelsToTry = [PRIMARY_MODEL, FALLBACK_MODEL];
 
@@ -81,7 +77,6 @@ export async function POST(req: NextRequest) {
       try {
         const results = await Promise.all(
           chunks.map(async (_chunk, idx) => {
-            // Correct URL: v1beta/models/{model}:embedContent
             const url =
               `https://generativelanguage.googleapis.com/v1beta/models/${model}:embedContent?key=${GEMINI_API_KEY}`;
 
@@ -112,15 +107,15 @@ export async function POST(req: NextRequest) {
               data.predictions?.[0]?.embedding?.values;
 
             if (!Array.isArray(values)) {
-              throw new Error(`Unexpected response shape for chunk ${idx}: ${JSON.stringify(data).slice(0, 100)}`);
+              throw new Error(`Unexpected response shape for chunk ${idx}`);
             }
             return values as number[];
           })
         );
 
-        // All chunks succeeded with this model
         embeddingResults.push(...results);
-        console.log(`[embed] ✓ model=${model} succeeded, ${results.length} chunks`);
+        const dims = results[0]?.length ?? 0;
+        console.log(`[embed] ✓ model=${model} succeeded, ${results.length} chunks, dim=${dims}`);
         break;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -141,17 +136,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Embedding generation failed" }, { status: 502 });
   }
 
-  // 4. Dimension check
-  const badDim = embeddingResults.findIndex((v) => v.length !== 768);
-  if (badDim !== -1) {
-    console.error(`[embed] Chunk[${badDim}] dim=${embeddingResults[badDim].length}, expected 768`);
-    return NextResponse.json(
-      { error: `Dimension mismatch at chunk ${badDim}` },
-      { status: 502 }
-    );
-  }
+  const dims = embeddingResults[0].length;
+  console.log(`[embed] Embedding dimension: ${dims}`);
 
-  // 5. Delete old rows for idempotency
+  // Delete old rows
   const { error: deleteError } = await supabaseAdmin!
     .from("equi_knowledge")
     .delete()
@@ -162,7 +150,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Failed to clear previous knowledge data" }, { status: 500 });
   }
 
-  // 6. Batch insert
+  // Batch insert
   const rows = embeddingResults.map((embedding, i) => ({
     user_id: userId,
     content: chunks[i],
@@ -179,6 +167,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Failed to store embeddings" }, { status: 500 });
   }
 
-  console.log(`[embed] ✓ Done — ${rows.length} rows stored for user=${userId}`);
-  return NextResponse.json({ ok: true, userId, chunksStored: rows.length, dimensions: 768 }, { status: 201 });
+  console.log(`[embed] ✓ Done — ${rows.length} rows stored, dim=${dims}`);
+  return NextResponse.json({ ok: true, userId, chunksStored: rows.length, dimensions: dims }, { status: 201 });
 }
