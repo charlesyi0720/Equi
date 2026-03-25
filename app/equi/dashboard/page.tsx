@@ -202,6 +202,35 @@ function extractCnEnTimeRange(text: string): { start: number; end: number } | nu
   }
   let m = text.match(/\b(\d{1,2}):00\s*[-–]\s*(\d{1,2}):00\b/);
   if (m) return { start: parseInt(m[1], 10), end: parseInt(m[2], 10) };
+  // "10:00 to 12:30" / "from 10:00 to 12:30" (must run before single-time "at 10:00" patterns)
+  m = text.match(
+    /\b(?:from\s+)?(\d{1,2}):(\d{2})\s*(AM|PM)?\s*(?:to|until|through|–|-|—|~)\s*(\d{1,2}):(\d{2})\s*(AM|PM)?\b/i
+  );
+  if (m) {
+    let sh = parseInt(m[1], 10);
+    const sm = parseInt(m[2], 10);
+    let eh = parseInt(m[4], 10);
+    const em = parseInt(m[5], 10);
+    const sSuf = m[3]?.toUpperCase();
+    const eSuf = m[6]?.toUpperCase();
+    if (sSuf === "PM" && sh < 12) sh += 12;
+    if (sSuf === "AM" && sh === 12) sh = 0;
+    if (eSuf === "PM" && eh < 12) eh += 12;
+    if (eSuf === "AM" && eh === 12) eh = 0;
+    if (!sSuf && !eSuf && /morning|早上|上午/i.test(text) && sh >= 1 && sh <= 11 && eh >= 1 && eh <= 12) {
+      // both morning hours, no suffix → AM
+    } else if (!sSuf && sh >= 1 && sh <= 11 && /afternoon|下午/i.test(text)) {
+      sh = pmHour(sh);
+      if (!eSuf && eh >= 1 && eh <= 11) eh = pmHour(eh);
+    } else if (!eSuf && eh >= 1 && eh <= 11 && /afternoon|下午/i.test(text)) {
+      eh = pmHour(eh);
+    }
+    const start = sh + sm / 60;
+    const end = eh + em / 60;
+    if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+      return { start, end };
+    }
+  }
   m = text.match(/\b(\d{1,2})\s*[-–]\s*(\d{1,2})\s*点\b/);
   if (m) {
     const a = parseInt(m[1], 10);
@@ -316,16 +345,32 @@ function extractSessionTitle(user: string, assistant: string): string | null {
   // "schedule your gym session" / "put your gym" / "reserve your morning run"
   m = assistant.match(/(?:schedule|put|reserve|block)\s+your\s+([a-zA-Z][^.!?\n]{2,40}?)\s+(?:session|block|time)/i);
   if (m) return m[1].trim();
-  // "your gym session" / "your gym" (no scheduling verb in immediate vicinity)
-  m = assistant.match(/\byour\s+([a-zA-Z][^.!?\n]{2,40}?)(?:\s+session|\s+block)?\b/i);
+  // "set your gym session" / "registered your gym session"
+  m = assistant.match(
+    /\b(?:set|placed|added|booked|registered)\s+your\s+([a-zA-Z][^.!?\n]{1,40}?)\s+(?:session|block|time)\b/i
+  );
+  if (m) return m[1].trim();
+  // "your gym session" — require session/block to avoid "your morning from 10"
+  m = assistant.match(/\byour\s+([a-zA-Z][^.!?\n]{1,40}?)\s+(?:session|block)\b/i);
   if (m) return m[1].trim();
   m = assistant.match(/(?:将|把)([^，,]{2,32}?)(?:安排|放在)/);
-  if (m) return m[1].trim();
-  m = assistant.match(/your\s+([a-zA-Z][^.!?\n]{1,48}?)\s+session/i);
   if (m) return m[1].trim();
   m = assistant.match(/(?:registered|booked|scheduled|placed)\s+(?:your\s+)?([a-zA-Z][^.!?\n]{1,48}?)(?:\s+for|\s+tom|\s+on|\.)/i);
   if (m) return m[1].trim();
   return null;
+}
+
+/** Use profile casing when chat matches an activity label (e.g. gym → Gym). */
+function canonicalizeActivityLabel(raw: string, activityLabels: string[]): string {
+  const t = raw.replace(/\s+/g, " ").trim();
+  if (!t) return t;
+  const low = t.toLowerCase();
+  for (const label of activityLabels) {
+    const L = label.trim();
+    if (L.length < 2) continue;
+    if (low === L.toLowerCase()) return L;
+  }
+  return t;
 }
 
 /** Pick a concrete calendar title from conversation + user's saved activity labels. */
@@ -336,7 +381,9 @@ function extractBestScheduleTitle(
   activityLabels: string[]
 ): string {
   const fromPair = extractSessionTitle(userMessage, assistantMessage);
-  if (fromPair) return fromPair.replace(/\s+/g, " ").trim().slice(0, 80);
+  if (fromPair) {
+    return canonicalizeActivityLabel(fromPair.replace(/\s+/g, " ").trim(), activityLabels).slice(0, 80);
+  }
 
   const combined = normalizeDigitsForParse(`${userMessage}\n${assistantMessage}\n${broaderHistory ?? ""}`);
 
@@ -344,11 +391,17 @@ function extractBestScheduleTitle(
     new Set(activityLabels.map((l) => l.trim()).filter((l) => l.length >= 2))
   ).sort((a, b) => b.length - a.length);
   for (const label of sorted) {
+    const L = label.trim();
+    if (L.length < 2) continue;
     try {
-      const esc = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      if (new RegExp(esc, "i").test(combined)) return label.slice(0, 80);
+      const esc = L.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      if (/\s/.test(L)) {
+        if (combined.toLowerCase().includes(L.toLowerCase())) return L.slice(0, 80);
+      } else if (new RegExp(`\\b${esc}\\b`, "i").test(combined)) {
+        return L.slice(0, 80);
+      }
     } catch {
-      if (combined.toLowerCase().includes(label.toLowerCase())) return label.slice(0, 80);
+      if (combined.toLowerCase().includes(L.toLowerCase())) return L.slice(0, 80);
     }
   }
 
@@ -411,6 +464,23 @@ function inferScheduleFromConversation(
   return { title: cleanTitle, dayIdx, start, end, isoDate };
 }
 
+/** Prefer prose "10:00 to 12:30" over coarse SCHEDULE_UPDATE integers when they describe the same block. */
+function mergeTagWithProseTimes(
+  tag: { start: number; end: number },
+  combined: string
+): { start: number; end: number } {
+  const prose = extractCnEnTimeRange(combined);
+  if (!prose || prose.end <= prose.start) return { start: tag.start, end: tag.end };
+  if (Math.abs(prose.start - tag.start) > 1.25) return { start: tag.start, end: tag.end };
+  if (prose.end > tag.end + 0.05 || prose.start < tag.start - 0.05) {
+    return { start: prose.start, end: prose.end };
+  }
+  if (prose.end - prose.start > tag.end - tag.start + 0.2) {
+    return { start: prose.start, end: prose.end };
+  }
+  return { start: tag.start, end: tag.end };
+}
+
 function resolveScheduleFromReply(
   userMessage: string,
   assistantMessage: string,
@@ -418,18 +488,17 @@ function resolveScheduleFromReply(
   broaderHistory?: string,
   activityLabels: string[] = []
 ): { title: string; dayIdx: number; start: number; end: number; isoDate?: string } | null {
+  const combined = normalizeDigitsForParse(`${userMessage}\n${assistantMessage}\n${broaderHistory ?? ""}`);
   const parsedTag = parseScheduleUpdateFromText(assistantMessage);
   if (parsedTag) {
+    const { start, end } = mergeTagWithProseTimes(parsedTag, combined);
     const generic = /^(focus\s*block|deep\s*work(\s*block)?|calendar\s*(block|event)?|scheduled\s*block)$/i.test(
       parsedTag.title.trim()
     );
-    if (generic) {
-      return {
-        ...parsedTag,
-        title: extractBestScheduleTitle(userMessage, assistantMessage, broaderHistory, activityLabels),
-      };
-    }
-    return parsedTag;
+    const title = generic
+      ? extractBestScheduleTitle(userMessage, assistantMessage, broaderHistory, activityLabels)
+      : canonicalizeActivityLabel(parsedTag.title.trim(), activityLabels);
+    return { ...parsedTag, start, end, title };
   }
   return inferScheduleFromConversation(userMessage, assistantMessage, now, broaderHistory, activityLabels);
 }
@@ -852,13 +921,21 @@ function DashboardContent() {
   // Persist a new agent event to Supabase via server route (bypasses RLS).
   // ---------------------------------------------------------------------------
   const persistAgentEvent = async (newEvent: { id: string; title: string; dayIdx: number; start: number; end: number; isoDate?: string }) => {
-    // 1. Optimistically update local state immediately.
-    setAgentCalendarEvents((prev) => [...prev, newEvent]);
+    const overlapsSlot = (a: { dayIdx: number; start: number; end: number; isoDate?: string }) => {
+      if (a.dayIdx !== newEvent.dayIdx) return false;
+      if ((a.isoDate || "") !== (newEvent.isoDate || "")) return false;
+      const lo = Math.max(a.start, newEvent.start);
+      const hi = Math.min(a.end, newEvent.end);
+      return lo < hi - 1e-6;
+    };
+
+    // 1. Replace any overlapping agent blocks on the same day/date (avoid stale "Focus block" under new "Gym").
+    setAgentCalendarEvents((prev) => [...prev.filter((e) => !overlapsSlot(e)), newEvent]);
 
     if (!userData) return;
 
     const newAgentEvents = [
-      ...(userData.calendarAgentEvents ?? []),
+      ...(userData.calendarAgentEvents ?? []).filter((e) => !overlapsSlot(e)),
       { ...newEvent, createdAt: new Date().toISOString() },
     ];
 
