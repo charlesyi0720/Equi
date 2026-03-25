@@ -536,22 +536,23 @@ function extractBestScheduleTitle(
 
   const combined = normalizeDigitsForParse(`${userMessage}\n${assistantMessage}\n${broaderHistory ?? ""}`);
 
-  const sorted = Array.from(
+  // Find all matching activity labels, keep the longest (most specific) one.
+  const matchingLabels = Array.from(
     new Set(activityLabels.map((l) => l.trim()).filter((l) => l.length >= 2))
-  ).sort((a, b) => b.length - a.length);
-  for (const label of sorted) {
-    const L = label.trim();
-    if (L.length < 2) continue;
+  ).filter((L) => {
     try {
       const esc = L.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       if (/\s/.test(L)) {
-        if (combined.toLowerCase().includes(L.toLowerCase())) return L.slice(0, 80);
-      } else if (new RegExp(`\\b${esc}\\b`, "i").test(combined)) {
-        return L.slice(0, 80);
+        return combined.toLowerCase().includes(L.toLowerCase());
       }
+      return new RegExp(`\\b${esc}\\b`, "i").test(combined);
     } catch {
-      if (combined.toLowerCase().includes(L.toLowerCase())) return L.slice(0, 80);
+      return combined.toLowerCase().includes(L.toLowerCase());
     }
+  });
+  if (matchingLabels.length > 0) {
+    const best = matchingLabels.sort((a, b) => b.length - a.length)[0];
+    return best.slice(0, 80);
   }
 
   const keywordTitles: [RegExp, string][] = [
@@ -571,7 +572,7 @@ function extractBestScheduleTitle(
     [/跑步/, "Run"],
     [/会议|开会/, "Meeting"],
   ];
-  for (const [re, title] of keywordTitles) {
+  for (const [re, title] of [...keywordTitles].sort((a, b) => b[1].length - a[1].length)) {
     if (re.test(combined)) return title;
   }
 
@@ -585,6 +586,29 @@ function extractTitleForProseRange(
   userMessage: string,
   broaderHistory: string | undefined
 ): string {
+  const combined = normalizeDigitsForParse(
+    `${userMessage}\n${assistantMessage}\n${broaderHistory ?? ""}`
+  );
+
+  // Longest activity-label match wins first
+  const allLabels = Array.from(
+    new Set(activityLabels.map((l) => l.trim()).filter((l) => l.length >= 2))
+  );
+  if (allLabels.length > 0) {
+    const match = [...allLabels]
+      .sort((a, b) => b.length - a.length)
+      .find((L) => {
+        try {
+          const esc = L.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          if (/\s/.test(L)) return combined.toLowerCase().includes(L.toLowerCase());
+          return new RegExp(`\\b${esc}\\b`, "i").test(combined);
+        } catch {
+          return combined.toLowerCase().includes(L.toLowerCase());
+        }
+      });
+    if (match) return match.slice(0, 80);
+  }
+
   const sliceFrom = range.index;
   const segment = assistantMessage.slice(sliceFrom, sliceFrom + 220);
   const headMatch = segment.match(
@@ -622,6 +646,39 @@ function hasSchedulingIntent(userText: string, assistantText: string): boolean {
   return /要|帮我|添加|安排|建议|空出|focus|block|schedule|assignment|作业|学习|专注|apply\s*to\s*calendar|应用到日历|put\s+your|schedule\s+your|reserve\s+your|should\s+i|would\s+you\s+like|要不要|可以吗|调度|时段/i.test(
     `${userText}\n${assistantText}`
   );
+}
+
+function hasRemoveIntent(text: string): boolean {
+  return /删[除掉]|[把那]个\s*(去掉?|删了?)|移除|cancel|delete|remove|别加|不要\s*(加|安排|添加)|不必\s*(加|安排)|停止|不\s*(要|加).*(gym|健身|计量|微观|宏观|作业|assignment|focus|block)|不要了/i.test(text);
+}
+
+function findAgentEventToRemove(
+  userText: string,
+  existingEvents: Array<{ id: string; title: string; dayIdx: number; start: number; end: number; isoDate?: string }>
+): string | null {
+  if (existingEvents.length === 0) return null;
+
+  const lower = userText.toLowerCase();
+
+  // Keyword-level match
+  const keywordMap: [RegExp, RegExp][] = [
+    [/\b(gym|workout)\b/i, /\b(gym|workout)\b/i],
+    [/\b(microeconomics|微观)\b/i, /\b(micro|微观)\b/i],
+    [/\b(econometrics|计量)\b/i, /\b(econometrics|计量)\b/i],
+    [/\b(macroeconomics|宏观)\b/i, /\b(macro|宏观)\b/i],
+  ];
+  for (const [evRe, textRe] of keywordMap) {
+    for (const ev of existingEvents) {
+      if (evRe.test(ev.title) && textRe.test(lower)) return ev.id;
+    }
+  }
+
+  // "this" / "that" → most recent agent event
+  if (/这|那|那个|它/i.test(userText) && !/\b(周|星期)\b/.test(userText)) {
+    return existingEvents[existingEvents.length - 1].id;
+  }
+
+  return null;
 }
 
 function inferScheduleFromConversation(
@@ -939,6 +996,30 @@ function DashboardContent() {
   const calendarScrollRef = useRef<HTMLDivElement>(null);
   const messagesSnapshotRef = useRef<Message[]>([]);
   const [calendarDetail, setCalendarDetail] = useState<CalendarGridEvent | null>(null);
+
+  // ---------------------------------------------------------------------------
+  // Delete an agent event by id from all state + Supabase.
+  // ---------------------------------------------------------------------------
+  const deleteAgentEvent = async (eventId: string) => {
+    setAgentCalendarEvents((prev) => prev.filter((e) => e.id !== eventId));
+    setCalendarDetail(null);
+    if (!userData) return;
+    const updated: EquiUser = {
+      ...userData,
+      calendarAgentEvents: (userData.calendarAgentEvents ?? []).filter((e) => e.id !== eventId),
+    };
+    setUserData(updated);
+    if (!supabase) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) return;
+    await fetch("/api/profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ user_data: updated }),
+    });
+  };
+
   const [showResumeDialog, setShowResumeDialog] = useState(false);
   const [pendingSession, setPendingSession] = useState<ConversationSession | null>(null);
   const currentSessionIdRef = useRef<string | null>(null);
@@ -1372,23 +1453,31 @@ function DashboardContent() {
         .map((a) => a.label?.trim())
         .filter((s): s is string => !!s && s.length > 0);
 
-      const schedules = resolveAllSchedulesFromReply(
-        userMessage.content,
-        assistantMessage.content,
-        new Date(),
-        broaderHistory,
-        activityLabelHints
-      );
-      for (let i = 0; i < schedules.length; i++) {
-        const s = schedules[i];
-        await persistAgentEvent({
-          id: `auto-${assistantMessage.id}-${Date.now()}-${i}`,
-          title: s.title,
-          dayIdx: s.dayIdx,
-          start: s.start,
-          end: s.end,
-          isoDate: s.isoDate,
-        });
+      // Remove intent: auto-delete instead of add
+      if (hasRemoveIntent(userMessage.content)) {
+        const toRemove = findAgentEventToRemove(userMessage.content, userData?.calendarAgentEvents ?? []);
+        if (toRemove) {
+          await deleteAgentEvent(toRemove);
+        }
+      } else {
+        const schedules = resolveAllSchedulesFromReply(
+          userMessage.content,
+          assistantMessage.content,
+          new Date(),
+          broaderHistory,
+          activityLabelHints
+        );
+        for (let i = 0; i < schedules.length; i++) {
+          const s = schedules[i];
+          await persistAgentEvent({
+            id: `auto-${assistantMessage.id}-${Date.now()}-${i}`,
+            title: s.title,
+            dayIdx: s.dayIdx,
+            start: s.start,
+            end: s.end,
+            isoDate: s.isoDate,
+          });
+        }
       }
     } catch (error) {
       console.error("Error sending message:", error);
@@ -1663,23 +1752,31 @@ function DashboardContent() {
         .map((a) => a.label?.trim())
         .filter((s): s is string => !!s && s.length > 0);
 
-      const schedules = resolveAllSchedulesFromReply(
-        userMessage.content,
-        assistantMessage.content,
-        new Date(),
-        broaderHistory,
-        activityLabelHints
-      );
-      for (let i = 0; i < schedules.length; i++) {
-        const s = schedules[i];
-        await persistAgentEvent({
-          id: `auto-${assistantMessage.id}-${Date.now()}-${i}`,
-          title: s.title,
-          dayIdx: s.dayIdx,
-          start: s.start,
-          end: s.end,
-          isoDate: s.isoDate,
-        });
+      // Remove intent: auto-delete instead of add
+      if (hasRemoveIntent(userMessage.content)) {
+        const toRemove = findAgentEventToRemove(userMessage.content, userData?.calendarAgentEvents ?? []);
+        if (toRemove) {
+          await deleteAgentEvent(toRemove);
+        }
+      } else {
+        const schedules = resolveAllSchedulesFromReply(
+          userMessage.content,
+          assistantMessage.content,
+          new Date(),
+          broaderHistory,
+          activityLabelHints
+        );
+        for (let i = 0; i < schedules.length; i++) {
+          const s = schedules[i];
+          await persistAgentEvent({
+            id: `auto-${assistantMessage.id}-${Date.now()}-${i}`,
+            title: s.title,
+            dayIdx: s.dayIdx,
+            start: s.start,
+            end: s.end,
+            isoDate: s.isoDate,
+          });
+        }
       }
     } catch (error: any) {
       console.error("Error sending message:", error?.message || error);
@@ -2131,13 +2228,42 @@ function DashboardContent() {
                 Copilot suggestion
               </div>
             )}
-            <button
-              type="button"
-              className="mt-6 w-full rounded-xl bg-slate-900 py-2.5 text-sm font-medium text-white hover:bg-slate-800 transition-colors cursor-pointer"
-              onClick={() => setCalendarDetail(null)}
-            >
-              Close
-            </button>
+            <div className="mt-6 flex gap-3">
+              {!calendarDetail.isFixed && (
+                <button
+                  type="button"
+                  className="flex-1 rounded-xl border border-rose-200 bg-rose-50 py-2.5 text-sm font-medium text-rose-600 hover:bg-rose-100 hover:border-rose-300 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                  onClick={() => {
+                    deleteAgentEvent(calendarDetail.id);
+                    const toast = document.createElement("div");
+                    toast.textContent = "Removed";
+                    toast.className =
+                      "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl bg-rose-600 text-white px-5 py-2.5 text-sm font-semibold shadow-lg animate-[fade-up_0.3s_ease-out]";
+                    document.body.appendChild(toast);
+                    setTimeout(() => {
+                      toast.style.opacity = "0";
+                      toast.style.transition = "opacity 0.3s";
+                      setTimeout(() => toast.remove(), 300);
+                    }, 2800);
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6l-1 14H6L5 6" />
+                    <path d="M10 11v6M14 11v6" />
+                    <path d="M9 6V4h6v2" />
+                  </svg>
+                  Remove
+                </button>
+              )}
+              <button
+                type="button"
+                className={`rounded-xl bg-slate-900 py-2.5 text-sm font-medium text-white hover:bg-slate-800 transition-colors cursor-pointer ${calendarDetail.isFixed ? "w-full" : "flex-1"}`}
+                onClick={() => setCalendarDetail(null)}
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
