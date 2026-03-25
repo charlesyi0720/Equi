@@ -215,6 +215,20 @@ export interface EquiUser {
   understanding: Understanding;
   lifeStructure: LifeStructure;
   agentBrain: AgentBrain;
+  /** One-off events added by the AI copilot or user (e.g. a one-time lecture). */
+  calendarAgentEvents?: CalendarAgentEvent[];
+}
+
+/** A one-off or recurring event added by the AI. */
+export interface CalendarAgentEvent {
+  id: string;
+  title: string;
+  dayIdx: number;
+  start: number;  // fractional hour
+  end: number;    // fractional hour
+  /** ISO date string (e.g. "2026-03-25"). If present the event only shows on that date; otherwise it recurs every matching weekday. */
+  isoDate?: string;
+  createdAt: string; // ISO timestamp
 }
 
 // ============================================================================

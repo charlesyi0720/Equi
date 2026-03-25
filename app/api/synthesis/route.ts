@@ -99,9 +99,10 @@ const SCHEDULE_INSTRUCTIONS = `
 
 [Schedule Suggestion Output Format]
 - When you suggest modifying the user's schedule, include the machine-readable tag ON ITS OWN LINE at the END of your response:
-  ${SCHEDULE_UPDATE_MARKER} Event Title | startHour | endHour | day
+  ${SCHEDULE_UPDATE_MARKER} Event Title | startHour | endHour | day [| YYYY-MM-DD]
   Example: 💡 [SCHEDULE_UPDATE]: Deep Work Block | 14 | 16 | wed
-- Field definitions: title (plain text, MUST NOT contain the pipe character | or line breaks—use a comma in the title if needed), startHour (integer 0-23), endHour (integer 0-23, must be greater than startHour), day (3-letter lowercase: mon/tue/wed/thu/fri/sat/sun).
+  Example with one-off date: 💡 [SCHEDULE_UPDATE]: Microeconomics Lecture | 13 | 15 | wed | 2026-03-25
+- Field definitions: title (plain text, MUST NOT contain the pipe character | or line breaks—use a comma in the title if needed), startHour (integer 0-23), endHour (integer 0-23, must be greater than startHour), day (3-letter lowercase: mon/tue/wed/thu/fri/sat/sun). The optional 5th field (YYYY-MM-DD) means this event occurs on that ONE date only; omit it if the event recurs every week on that day.
 - Do NOT put any other text on that same line. The app parses this line automatically when your reply finishes; the user may also tap "Apply to Calendar" if shown.
 - Do NOT add this tag to non-scheduling responses.
 `;

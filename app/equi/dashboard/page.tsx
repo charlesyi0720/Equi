@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, FormEvent } from "react";
+import React, { useState, useEffect, useRef, useMemo, FormEvent } from "react";
 import { EquiUser } from "../types";
 import { supabase } from "../lib/supabase";
 import { onAuthStateChange, signOut } from "../lib/auth";
@@ -109,16 +109,20 @@ interface CalendarGridEvent {
   start: number;
   end: number;
   isFixed: boolean;
+  /** ISO date string for one-off events (e.g. "2026-03-25"). If absent the event recurs every matching weekday. */
+  isoDate?: string;
 }
 
-/** Matches machine-readable schedule line; supports ASCII and fullwidth pipe. */
+/** Matches machine-readable schedule line; supports ASCII and fullwidth pipe. Optional 5th field: YYYY-MM-DD for one-off events. */
 const SCHEDULE_UPDATE_LINE_RE =
-  /\[SCHEDULE_UPDATE:\s*([^\|\n\r\uFF5C]+?)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*([^\]\s\n\r]+)/i;
+  /\[SCHEDULE_UPDATE:\s*([^\|\n\r\uFF5C]+?)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*([^\[\]\s\n\r]+?)(?:\s*[\|｜]\s*(\d{4}-\d{2}-\d{2}))?/i;
 
-function parseScheduleUpdateFromText(text: string): { title: string; dayIdx: number; start: number; end: number } | null {
+function parseScheduleUpdateFromText(
+  text: string
+): { title: string; dayIdx: number; start: number; end: number; isoDate?: string } | null {
   const match = text.match(SCHEDULE_UPDATE_LINE_RE);
   if (!match) return null;
-  const [, titleRaw, startStr, endStr, dayRaw] = match;
+  const [, titleRaw, startStr, endStr, dayRaw, isoDate] = match;
   const start = parseInt(startStr, 10);
   const end = parseInt(endStr, 10);
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
@@ -126,7 +130,7 @@ function parseScheduleUpdateFromText(text: string): { title: string; dayIdx: num
   const key = dayRaw.trim().toLowerCase().substring(0, 3);
   const dayIdx = dayMap[key];
   if (dayIdx === undefined) return null;
-  return { title: titleRaw.trim(), dayIdx, start, end };
+  return { title: titleRaw.trim(), dayIdx, start, end, isoDate: isoDate ?? undefined };
 }
 
 function normalizeTitleForMerge(title: string): string {
@@ -312,13 +316,14 @@ function DashboardContent() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
-  const [calendarEvents, setCalendarEvents] = useState<Array<{
+  /** Agent/AI-added events (persisted to user_data.calendarAgentEvents). */
+  const [agentCalendarEvents, setAgentCalendarEvents] = useState<Array<{
     id: string;
     title: string;
     dayIdx: number;
     start: number;
     end: number;
-    isFixed: boolean;
+    isoDate?: string;
   }>>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isMountedRef = useRef(true);
@@ -432,19 +437,14 @@ function DashboardContent() {
     }
   }, [userData]);
 
-  // Populate calendarEvents from userData — deduped by slot ID so push on re-render never ghosts
-  useEffect(() => {
-    if (!userData) return;
-
+  // Derive fixed events from userData (memoised so agent events are never clobbered).
+  const fixedCalendarEvents = useMemo(() => {
+    if (!userData) return [];
     const weekdayToShort: Record<string, string> = {
       Monday: "Mon", Tuesday: "Tue", Wednesday: "Wed",
       Thursday: "Thu", Friday: "Fri", Saturday: "Sat", Sunday: "Sun",
     };
-
-    const events: Array<{
-      id: string; title: string; dayIdx: number; start: number; end: number; isFixed: boolean;
-    }> = [];
-
+    const events: Array<{ id: string; title: string; dayIdx: number; start: number; end: number; isFixed: boolean }> = [];
     const seen = new Set<string>();
     const fixedActivities = userData.lifeStructure?.fixedActivities || [];
     for (const activity of Array.isArray(fixedActivities) ? fixedActivities : []) {
@@ -454,27 +454,68 @@ function DashboardContent() {
           const uid = `${slot.day}|${slot.startHour}|${slot.startMinute}|${slot.endHour}`;
           if (seen.has(uid)) continue;
           seen.add(uid);
-
           const shortDay = weekdayToShort[slot.day] || slot.day;
           const dayIdx = days.indexOf(shortDay as typeof days[number]);
           if (dayIdx < 0) continue;
-
           const start = (slot.startHour ?? 0) + ((slot.startMinute ?? 0) / 60);
           const end   = (slot.endHour   ?? 0) + ((slot.endMinute   ?? 0) / 60);
           if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
-
           events.push({ id: uid, title: activity.label || "Untitled", dayIdx, start, end, isFixed: true });
         }
       }
     }
-
     if (events.length === 0) {
       events.push({ id: "placeholder-wed-deepwork", title: "Deep Work: Thesis", dayIdx: 2, start: 10, end: 13, isFixed: false });
     }
-
-    events.sort((a, b) => (b.end - b.start) - (a.end - a.start));
-    setCalendarEvents(events);
+    return events;
   }, [userData]);
+
+  // Initialise agent events from persisted profile data.
+  useEffect(() => {
+    if (!userData) return;
+    const saved = userData.calendarAgentEvents ?? [];
+    if (saved.length > 0) {
+      setAgentCalendarEvents(saved.map((e) => ({
+        id: e.id,
+        title: e.title,
+        dayIdx: e.dayIdx,
+        start: e.start,
+        end: e.end,
+        isoDate: e.isoDate,
+      })));
+    }
+  }, [userData]);
+
+  // ---------------------------------------------------------------------------
+  // Persist a new agent event to Supabase + local state so it survives page reload.
+  // ---------------------------------------------------------------------------
+  const persistAgentEvent = async (newEvent: { id: string; title: string; dayIdx: number; start: number; end: number; isoDate?: string }) => {
+    const updated: typeof newEvent[] = [...agentCalendarEvents, newEvent];
+    setAgentCalendarEvents(updated);
+
+    if (!userData) return;
+    const merged: EquiUser = {
+      ...userData,
+      calendarAgentEvents: [
+        ...(userData.calendarAgentEvents ?? []),
+        { ...newEvent, createdAt: new Date().toISOString() },
+      ],
+    };
+
+    // Update local state so the useMemo recalculates if needed.
+    setUserData(merged);
+
+    // Persist to Supabase.  If RLS blocks it we silently continue — the in-session
+    // state is already updated and will survive React re-renders.
+    if (!supabase) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { error } = await supabase
+      .from("profiles")
+      .update({ user_data: merged })
+      .eq("id", user.id);
+    if (error) console.warn("[persistAgentEvent] Supabase write failed:", error.message);
+  };
 
   const generateOpeningMessage = async () => {
     if (!userData) return;
@@ -554,7 +595,7 @@ function DashboardContent() {
     setInputValue("");
     setIsStreaming(true);
 
-    const conversationHistory = messages.map((m) => ({
+    const conversationHistory = [...messages, userMessage].map((m) => ({
       role: m.role === "user" ? "user" : "model",
       content: m.content,
     }));
@@ -619,17 +660,14 @@ function DashboardContent() {
 
       const scheduleParsed = parseScheduleUpdateFromText(assistantMessage.content);
       if (scheduleParsed) {
-        setCalendarEvents((prev) => [
-          ...prev,
-          {
-            id: `auto-${assistantMessage.id}-${Date.now()}`,
-            title: scheduleParsed.title,
-            dayIdx: scheduleParsed.dayIdx,
-            start: scheduleParsed.start,
-            end: scheduleParsed.end,
-            isFixed: false,
-          },
-        ]);
+        await persistAgentEvent({
+          id: `auto-${assistantMessage.id}-${Date.now()}`,
+          title: scheduleParsed.title,
+          dayIdx: scheduleParsed.dayIdx,
+          start: scheduleParsed.start,
+          end: scheduleParsed.end,
+          isoDate: scheduleParsed.isoDate,
+        });
       }
     } catch (error) {
       console.error("Error sending message:", error);
@@ -704,6 +742,30 @@ function DashboardContent() {
   const name = userData?.understanding?.name || "User";
 
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+
+  // Week column dates: Monday of the current week (using local time) as ISO strings.
+  const userTz = typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "UTC";
+  const today = new Date();
+  const dow = today.getDay(); // 0=Sun
+  const monOffset = dow === 0 ? -6 : 1 - dow; // Mon-based offset
+  const monday = new Date(today);
+  monday.setDate(today.getDate() + monOffset);
+  monday.setHours(0, 0, 0, 0);
+  const weekDates: string[] = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return d.toLocaleDateString("en-US", { timeZone: userTz, month: "short", day: "numeric" });
+  });
+  // ISO date strings for each column, for one-off event filtering (e.g. "2026-03-23").
+  const columnIsoDates: string[] = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  });
+  const weekRangeLabel = `${weekDates[0]} – ${weekDates[6]}`;
   const startHour = 0;
   const endHour = 23;
   const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i);
@@ -811,17 +873,14 @@ function DashboardContent() {
 
       const scheduleParsed = parseScheduleUpdateFromText(assistantMessage.content);
       if (scheduleParsed) {
-        setCalendarEvents((prev) => [
-          ...prev,
-          {
-            id: `auto-${assistantMessage.id}-${Date.now()}`,
-            title: scheduleParsed.title,
-            dayIdx: scheduleParsed.dayIdx,
-            start: scheduleParsed.start,
-            end: scheduleParsed.end,
-            isFixed: false,
-          },
-        ]);
+        await persistAgentEvent({
+          id: `auto-${assistantMessage.id}-${Date.now()}`,
+          title: scheduleParsed.title,
+          dayIdx: scheduleParsed.dayIdx,
+          start: scheduleParsed.start,
+          end: scheduleParsed.end,
+          isoDate: scheduleParsed.isoDate,
+        });
       }
     } catch (error: any) {
       console.error("Error sending message:", error?.message || error);
@@ -837,8 +896,14 @@ function DashboardContent() {
     }
   };
 
+  // Combine fixed (from onboarding) and agent (AI-added) events for display.
+  const allCalendarEvents: CalendarGridEvent[] = [
+    ...fixedCalendarEvents,
+    ...agentCalendarEvents.map((e) => ({ ...e, isFixed: false })),
+  ];
+
   const uniqueVisualEvents = mergeCalendarEventsForDisplay(
-    Array.from(new Map(calendarEvents.map((e) => [e.id, e])).values()) as CalendarGridEvent[]
+    Array.from(new Map(allCalendarEvents.map((e) => [e.id, e])).values())
   );
 
   // Lanes only among events that overlap in time (same connected component). Non-overlapping events stay full width.
@@ -930,17 +995,15 @@ function DashboardContent() {
                           onClick={() => {
                             const parsed = parseScheduleUpdateFromText(m.content);
                             if (!parsed) return alert("Failed to parse AI schedule tag.");
-                            setCalendarEvents((prev) => [
-                              ...prev,
-                              {
-                                id: `dynamic-${Date.now()}`,
-                                title: parsed.title,
-                                dayIdx: parsed.dayIdx,
-                                start: parsed.start,
-                                end: parsed.end,
-                                isFixed: false,
-                              },
-                            ]);
+                            const newEvent = {
+                              id: `dynamic-${Date.now()}`,
+                              title: parsed.title,
+                              dayIdx: parsed.dayIdx,
+                              start: parsed.start,
+                              end: parsed.end,
+                              isoDate: parsed.isoDate,
+                            };
+                            persistAgentEvent(newEvent);
                             const toast = document.createElement("div");
                             toast.textContent = "Schedule updated!";
                             toast.className =
@@ -1023,7 +1086,7 @@ function DashboardContent() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-sm font-semibold text-slate-900 tracking-tight">This Week</div>
-                  <div className="mt-1 text-xs text-slate-400 font-medium">Mon&ndash;Sun &middot; 12 AM&ndash;11 PM</div>
+                  <div className="mt-1 text-xs text-slate-400 font-medium">{weekRangeLabel} &middot; 12 AM&ndash;11 PM</div>
                 </div>
                 <div className="flex items-center gap-5 text-xs text-slate-500 font-medium">
                   <div className="flex items-center gap-2">
@@ -1064,10 +1127,11 @@ function DashboardContent() {
                   {days.map((d, idx) => (
                     <div
                       key={d}
-                      className="sticky top-0 z-10 flex items-center justify-center border-b border-r border-gray-100 bg-white text-xs font-semibold text-slate-600 tracking-wide"
+                      className="sticky top-0 z-10 flex flex-col items-center justify-center border-b border-r border-gray-100 bg-white text-[11px] font-semibold text-slate-600 tracking-wide"
                       style={{ left: idx === 0 ? 0 : undefined }}
                     >
-                      {d}
+                      <span>{d}</span>
+                      <span className="text-[10px] font-medium text-slate-400">{weekDates[idx]}</span>
                     </div>
                   ))}
 
@@ -1126,6 +1190,10 @@ function DashboardContent() {
                   {/* Render real events */}
                   {uniqueVisualEvents.map((event) => {
                     if (!Number.isFinite(event.dayIdx) || !Number.isFinite(event.start) || !Number.isFinite(event.end)) {
+                      return null;
+                    }
+                    // One-off events: only show on the column whose ISO date matches.
+                    if (event.isoDate && event.isoDate !== columnIsoDates[event.dayIdx]) {
                       return null;
                     }
                     const colStart = gridColForDayIdx(event.dayIdx);
