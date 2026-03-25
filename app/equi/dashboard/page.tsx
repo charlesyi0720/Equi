@@ -171,6 +171,18 @@ function pmHour(h: number): number {
   return h;
 }
 
+/** 12-hour label with minutes when needed (e.g. 12.5 → "12:30 PM"). Avoids Math.ceil(12.5) → "1 PM". */
+function formatDecimalHourForDisplay(decimal: number): string {
+  const totalMinutes = Math.round(decimal * 60) % (24 * 60);
+  const h24 = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  const isPm = h24 >= 12;
+  let h12 = h24 % 12;
+  if (h12 === 0) h12 = 12;
+  const mm = m === 0 ? "" : `:${String(m).padStart(2, "0")}`;
+  return `${h12}${mm} ${isPm ? "PM" : "AM"}`;
+}
+
 /** Parse Chinese / plain time ranges when the model omits [SCHEDULE_UPDATE]: line. */
 function extractCnEnTimeRange(text: string): { start: number; end: number } | null {
   // Avoid matching 下午好 — require a digit soon after 下午/上午.
@@ -299,12 +311,122 @@ function extractCnEnTimeRange(text: string): { start: number; end: number } | nu
   return null;
 }
 
+const COLON_RANGE_RE_GLOBAL =
+  /(\d{1,2}):(\d{2})(?:\s*(AM|PM|am|pm))?\s*[-–至到～~]\s*(\d{1,2}):(\d{2})(?:\s*(AM|PM|am|pm))?/g;
+
+function parseColonRangeMatch(
+  m: RegExpMatchArray,
+  text: string,
+  matchIndex: number
+): { start: number; end: number } | null {
+  let sh = parseInt(m[1], 10);
+  const sm = parseInt(m[2], 10);
+  let eh = parseInt(m[4], 10);
+  const em = parseInt(m[5], 10);
+  const sSuf = m[3]?.toUpperCase();
+  const eSuf = m[6]?.toUpperCase();
+  if (sSuf === "PM" && sh < 12) sh += 12;
+  if (sSuf === "AM" && sh === 12) sh = 0;
+  if (eSuf === "PM" && eh < 12) eh += 12;
+  if (eSuf === "AM" && eh === 12) eh = 0;
+  const winStart = Math.max(0, matchIndex - 120);
+  const beforeSlice = text.slice(winStart, matchIndex);
+  if (!sSuf && !eSuf) {
+    if (/下午|afternoon/i.test(beforeSlice) && sh >= 1 && sh <= 11) sh = pmHour(sh);
+    if (/下午|afternoon/i.test(beforeSlice) && eh >= 1 && eh <= 11) eh = pmHour(eh);
+  }
+  const start = sh + sm / 60;
+  const end = eh + em / 60;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+  if (start < 4 || end > 25) return null;
+  return { start, end };
+}
+
+function dedupeTimeRanges(
+  ranges: Array<{ start: number; end: number; index: number }>
+): Array<{ start: number; end: number; index: number }> {
+  const seen = new Set<string>();
+  const res: Array<{ start: number; end: number; index: number }> = [];
+  for (const r of [...ranges].sort((a, b) => a.index - b.index)) {
+    const key = `${r.start.toFixed(3)}-${r.end.toFixed(3)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    res.push(r);
+  }
+  return res;
+}
+
+function extractAllColonTimeRanges(text: string): Array<{ start: number; end: number; index: number }> {
+  const re = new RegExp(COLON_RANGE_RE_GLOBAL.source, "g");
+  const out: Array<{ start: number; end: number; index: number }> = [];
+  let m: RegExpMatchArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const idx = m.index;
+    if (idx === undefined) continue;
+    const before = text.slice(Math.max(0, idx - 6), idx);
+    if (/\d{4}-$/.test(before)) continue;
+    const parsed = parseColonRangeMatch(m, text, idx);
+    if (parsed) out.push({ ...parsed, index: idx });
+  }
+  return dedupeTimeRanges(out);
+}
+
 function cnWeekCharToIdx(c: string): number | undefined {
   const map: Record<string, number> = { 一: 0, 二: 1, 三: 2, 四: 3, 五: 4, 六: 5, 日: 6, 天: 6 };
   return map[c];
 }
 
+/** ISO date for column `targetDayIdx` (Mon=0) within the same calendar week as `ref` (local). */
+function isoDateForWeekdayInDisplayedWeek(ref: Date, targetDayIdx: number): string {
+  const dow = ref.getDay();
+  const monOffset = dow === 0 ? -6 : 1 - dow;
+  const monday = new Date(ref);
+  monday.setDate(ref.getDate() + monOffset);
+  monday.setHours(12, 0, 0, 0);
+  const d = new Date(monday);
+  d.setDate(monday.getDate() + targetDayIdx);
+  return formatLocalIsoDate(d);
+}
+
+function englishWeekdayToMondayIdx(word: string): number | undefined {
+  const w = word.toLowerCase();
+  const map: Record<string, number> = {
+    monday: 0,
+    tuesday: 1,
+    wednesday: 2,
+    thursday: 3,
+    friday: 4,
+    saturday: 5,
+    sunday: 6,
+  };
+  return map[w];
+}
+
+/**
+ * Named weekdays must win over "tomorrow" when history + current message are merged:
+ * older replies may still say 明天 while the latest suggestion says 周五.
+ */
 function resolveDayFromText(text: string, ref: Date): { dayIdx: number; isoDate?: string } {
+  const en = text.match(
+    /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i
+  );
+  if (en) {
+    const idx = englishWeekdayToMondayIdx(en[1]);
+    if (idx !== undefined) {
+      return { dayIdx: idx, isoDate: isoDateForWeekdayInDisplayedWeek(ref, idx) };
+    }
+  }
+  const wm = text.match(/星期([一二三四五六日天])|周([一二三四五六日天])/);
+  if (wm) {
+    const ch = wm[1] ?? wm[2];
+    const idx = cnWeekCharToIdx(ch);
+    if (idx !== undefined) {
+      return { dayIdx: idx, isoDate: isoDateForWeekdayInDisplayedWeek(ref, idx) };
+    }
+  }
+  if (/\btoday\b/i.test(text) || /\btonight\b/i.test(text) || /\b今[天日]\b/.test(text)) {
+    return { dayIdx: mondayBasedDayIndex(ref), isoDate: formatLocalIsoDate(ref) };
+  }
   if (/后天/.test(text)) {
     const d = new Date(ref);
     d.setDate(d.getDate() + 2);
@@ -325,23 +447,47 @@ function resolveDayFromText(text: string, ref: Date): { dayIdx: number; isoDate?
     d.setDate(d.getDate() + 1);
     return { dayIdx: mondayBasedDayIndex(d), isoDate: formatLocalIsoDate(d) };
   }
-  if (/\btoday\b/i.test(text) || /\btonight\b/i.test(text)) {
-    return { dayIdx: mondayBasedDayIndex(ref), isoDate: formatLocalIsoDate(ref) };
-  }
-  const wm = text.match(/周([一二三四五六日天])/);
-  if (wm) {
-    const idx = cnWeekCharToIdx(wm[1]);
-    if (idx !== undefined) return { dayIdx: idx };
-  }
   return { dayIdx: mondayBasedDayIndex(ref), isoDate: formatLocalIsoDate(ref) };
+}
+
+/** Prefer explicit weekday in the latest assistant message over relative words in merged history. */
+function resolveDayForSchedule(
+  assistantMessage: string,
+  combinedForFallback: string,
+  ref: Date
+): { dayIdx: number; isoDate?: string } {
+  const a = assistantMessage.trim();
+  if (
+    /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(a) ||
+    /星期[一二三四五六日天]/.test(a) ||
+    /周[一二三四五六日天]/.test(a)
+  ) {
+    return resolveDayFromText(a, ref);
+  }
+  return resolveDayFromText(combinedForFallback, ref);
+}
+
+function isMetaScheduleTitle(s: string): boolean {
+  const t = s.replace(/\s+/g, " ").trim();
+  if (!t) return true;
+  return (
+    /^(这两个|以下|上述|建议|安排一下?|深度工作|工作任务|两个深度|此类|以下两)/.test(t) ||
+    (t.length <= 40 && /深度工作|工作任务/.test(t))
+  );
 }
 
 function extractSessionTitle(user: string, assistant: string): string | null {
   const u = user.replace(/\s+/g, " ");
   let m = u.match(/focus\s+on\s+(.+?)$/i);
-  if (m) return m[1].trim();
+  if (m) {
+    const t = m[1].trim();
+    if (!isMetaScheduleTitle(t)) return t;
+  }
   m = u.match(/(?:关于|做|完成)\s*([^\n，。！？]{2,40})/);
-  if (m) return m[1].trim();
+  if (m) {
+    const t = m[1].trim();
+    if (!isMetaScheduleTitle(t)) return t;
+  }
   // "schedule your gym session" / "put your gym" / "reserve your morning run"
   m = assistant.match(/(?:schedule|put|reserve|block)\s+your\s+([a-zA-Z][^.!?\n]{2,40}?)\s+(?:session|block|time)/i);
   if (m) return m[1].trim();
@@ -354,7 +500,10 @@ function extractSessionTitle(user: string, assistant: string): string | null {
   m = assistant.match(/\byour\s+([a-zA-Z][^.!?\n]{1,40}?)\s+(?:session|block)\b/i);
   if (m) return m[1].trim();
   m = assistant.match(/(?:将|把)([^，,]{2,32}?)(?:安排|放在)/);
-  if (m) return m[1].trim();
+  if (m) {
+    const t = m[1].trim();
+    if (!isMetaScheduleTitle(t)) return t;
+  }
   m = assistant.match(/(?:registered|booked|scheduled|placed)\s+(?:your\s+)?([a-zA-Z][^.!?\n]{1,48}?)(?:\s+for|\s+tom|\s+on|\.)/i);
   if (m) return m[1].trim();
   return null;
@@ -381,7 +530,7 @@ function extractBestScheduleTitle(
   activityLabels: string[]
 ): string {
   const fromPair = extractSessionTitle(userMessage, assistantMessage);
-  if (fromPair) {
+  if (fromPair && !isMetaScheduleTitle(fromPair)) {
     return canonicalizeActivityLabel(fromPair.replace(/\s+/g, " ").trim(), activityLabels).slice(0, 80);
   }
 
@@ -414,6 +563,10 @@ function extractBestScheduleTitle(
     [/\b(class|lecture|seminar)\b/i, "Class"],
     [/\b(homework|assignment|problem set|p-?set)\b/i, "Homework"],
     [/\b(macro|macroeconomics)\b/i, "Macroeconomics"],
+    [/\b(microeconomics|microecon)\b/i, "Microeconomics"],
+    [/\b(econometrics|econometric)\b/i, "Econometrics"],
+    [/微观(?:经济)?(?:学)?/, "Microeconomics"],
+    [/计量(?:经济)?(?:学)?/, "Econometrics"],
     [/健身|健身房|锻炼/, "Gym"],
     [/跑步/, "Run"],
     [/会议|开会/, "Meeting"],
@@ -425,6 +578,40 @@ function extractBestScheduleTitle(
   return "Scheduled block";
 }
 
+function extractTitleForProseRange(
+  assistantMessage: string,
+  range: { start: number; end: number; index: number },
+  activityLabels: string[],
+  userMessage: string,
+  broaderHistory: string | undefined
+): string {
+  const sliceFrom = range.index;
+  const segment = assistantMessage.slice(sliceFrom, sliceFrom + 220);
+  const headMatch = segment.match(
+    /^(\d{1,2}):(\d{2})(?:\s*(?:AM|PM|am|pm))?\s*[-–至到～~]\s*(\d{1,2}):(\d{2})(?:\s*(?:AM|PM|am|pm))?/
+  );
+  const consumed = headMatch?.[0].length ?? 0;
+  const after = segment.slice(consumed, consumed + 130);
+  const forEn = after.match(
+    /^\s*(?:for|用于|：|:|，|,)?\s*([A-Za-z][A-Za-z\s\-]{2,52}?)(?=\s*[,.，。、和及\n]|$)/i
+  );
+  if (forEn) {
+    const raw = forEn[1].trim();
+    if (!isMetaScheduleTitle(raw)) {
+      return canonicalizeActivityLabel(raw, activityLabels).slice(0, 80);
+    }
+  }
+  const im = after.search(/(?:微观(?:经济)?(?:学)?|Microeconomics)/i);
+  const ie = after.search(/(?:计量(?:经济)?(?:学)?|Econometrics)/i);
+  if (im >= 0 && (ie < 0 || im <= ie)) return "Microeconomics";
+  if (ie >= 0 && (im < 0 || ie < im)) return "Econometrics";
+  const micro = segment.match(/\b(Microeconomics|Econometrics|Macroeconomics)\b/i);
+  if (micro) return micro[1];
+  const zhCourse = after.match(/^[\s，,]*([\u4e00-\u9fff]{2,18}(?:学|论)?)(?=\s*[,.，。、和及\n]|$)/);
+  if (zhCourse && !isMetaScheduleTitle(zhCourse[1])) return zhCourse[1].trim().slice(0, 80);
+  return extractBestScheduleTitle(userMessage, assistantMessage, broaderHistory, activityLabels);
+}
+
 /** Returns true when text contains a recognizable clock time. */
 function containsAnyTime(text: string): boolean {
   return /\b\d{1,2}:\d{2}\b|\b\d{1,2}\s*(?:am|pm)\b|点|上午|下午|晚上|早上|早晨|\d{1,2}\s*[-–]\s*\d{1,2}\s*点/i.test(text);
@@ -432,7 +619,7 @@ function containsAnyTime(text: string): boolean {
 
 /** Returns true when either side of the conversation shows scheduling intent. */
 function hasSchedulingIntent(userText: string, assistantText: string): boolean {
-  return /要|帮我|添加|安排|空出|focus|block|schedule|assignment|作业|学习|专注|apply\s*to\s*calendar|应用到日历|put\s+your|schedule\s+your|reserve\s+your|should\s+i|would\s+you\s+like|要不要|可以吗/i.test(
+  return /要|帮我|添加|安排|建议|空出|focus|block|schedule|assignment|作业|学习|专注|apply\s*to\s*calendar|应用到日历|put\s+your|schedule\s+your|reserve\s+your|should\s+i|would\s+you\s+like|要不要|可以吗|调度|时段/i.test(
     `${userText}\n${assistantText}`
   );
 }
@@ -458,7 +645,7 @@ function inferScheduleFromConversation(
   const { start, end } = hours;
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
 
-  const { dayIdx, isoDate } = resolveDayFromText(combined, now);
+  const { dayIdx, isoDate } = resolveDayForSchedule(assistantMessage, combined, now);
   const cleanTitle = extractBestScheduleTitle(userMessage, assistantMessage, broaderHistory, activityLabels);
   console.debug("[schedule] inferScheduleFromConversation: parsed:", { title: cleanTitle, start, end, dayIdx });
   return { title: cleanTitle, dayIdx, start, end, isoDate };
@@ -472,6 +659,16 @@ function mergeTagWithProseTimes(
   const prose = extractCnEnTimeRange(combined);
   if (!prose || prose.end <= prose.start) return { start: tag.start, end: tag.end };
   if (Math.abs(prose.start - tag.start) > 1.25) return { start: tag.start, end: tag.end };
+  const proseHasSubHourPrecision =
+    Math.abs((prose.start * 60) % 60) > 0.25 || Math.abs((prose.end * 60) % 60) > 0.25;
+  if (
+    proseHasSubHourPrecision &&
+    Math.abs(prose.start - tag.start) <= 1 + 1e-6 &&
+    prose.end <= tag.end + 1 / 60 &&
+    prose.end > prose.start
+  ) {
+    return { start: prose.start, end: prose.end };
+  }
   if (prose.end > tag.end + 0.05 || prose.start < tag.start - 0.05) {
     return { start: prose.start, end: prose.end };
   }
@@ -481,13 +678,15 @@ function mergeTagWithProseTimes(
   return { start: tag.start, end: tag.end };
 }
 
-function resolveScheduleFromReply(
+type ParsedSchedule = { title: string; dayIdx: number; start: number; end: number; isoDate?: string };
+
+function resolveAllSchedulesFromReply(
   userMessage: string,
   assistantMessage: string,
   now: Date,
   broaderHistory?: string,
   activityLabels: string[] = []
-): { title: string; dayIdx: number; start: number; end: number; isoDate?: string } | null {
+): ParsedSchedule[] {
   const combined = normalizeDigitsForParse(`${userMessage}\n${assistantMessage}\n${broaderHistory ?? ""}`);
   const parsedTag = parseScheduleUpdateFromText(assistantMessage);
   if (parsedTag) {
@@ -498,9 +697,49 @@ function resolveScheduleFromReply(
     const title = generic
       ? extractBestScheduleTitle(userMessage, assistantMessage, broaderHistory, activityLabels)
       : canonicalizeActivityLabel(parsedTag.title.trim(), activityLabels);
-    return { ...parsedTag, start, end, title };
+    return [{ ...parsedTag, start, end, title }];
   }
-  return inferScheduleFromConversation(userMessage, assistantMessage, now, broaderHistory, activityLabels);
+
+  if (!containsAnyTime(combined) || !hasSchedulingIntent(userMessage, assistantMessage)) return [];
+
+  const assistantNorm = normalizeDigitsForParse(assistantMessage);
+  const { dayIdx, isoDate } = resolveDayForSchedule(assistantMessage, combined, now);
+  const ranges = extractAllColonTimeRanges(assistantNorm);
+
+  if (ranges.length >= 2) {
+    return ranges.map((r) => ({
+      title: extractTitleForProseRange(assistantMessage, r, activityLabels, userMessage, broaderHistory),
+      dayIdx,
+      start: r.start,
+      end: r.end,
+      isoDate,
+    }));
+  }
+  if (ranges.length === 1) {
+    return [
+      {
+        title: extractTitleForProseRange(assistantMessage, ranges[0], activityLabels, userMessage, broaderHistory),
+        dayIdx,
+        start: ranges[0].start,
+        end: ranges[0].end,
+        isoDate,
+      },
+    ];
+  }
+
+  const one = inferScheduleFromConversation(userMessage, assistantMessage, now, broaderHistory, activityLabels);
+  return one ? [one] : [];
+}
+
+function resolveScheduleFromReply(
+  userMessage: string,
+  assistantMessage: string,
+  now: Date,
+  broaderHistory?: string,
+  activityLabels: string[] = []
+): ParsedSchedule | null {
+  const all = resolveAllSchedulesFromReply(userMessage, assistantMessage, now, broaderHistory, activityLabels);
+  return all[0] ?? null;
 }
 
 function normalizeTitleForMerge(title: string): string {
@@ -1133,21 +1372,22 @@ function DashboardContent() {
         .map((a) => a.label?.trim())
         .filter((s): s is string => !!s && s.length > 0);
 
-      const scheduleParsed = resolveScheduleFromReply(
+      const schedules = resolveAllSchedulesFromReply(
         userMessage.content,
         assistantMessage.content,
         new Date(),
         broaderHistory,
         activityLabelHints
       );
-      if (scheduleParsed) {
+      for (let i = 0; i < schedules.length; i++) {
+        const s = schedules[i];
         await persistAgentEvent({
-          id: `auto-${assistantMessage.id}-${Date.now()}`,
-          title: scheduleParsed.title,
-          dayIdx: scheduleParsed.dayIdx,
-          start: scheduleParsed.start,
-          end: scheduleParsed.end,
-          isoDate: scheduleParsed.isoDate,
+          id: `auto-${assistantMessage.id}-${Date.now()}-${i}`,
+          title: s.title,
+          dayIdx: s.dayIdx,
+          start: s.start,
+          end: s.end,
+          isoDate: s.isoDate,
         });
       }
     } catch (error) {
@@ -1423,21 +1663,22 @@ function DashboardContent() {
         .map((a) => a.label?.trim())
         .filter((s): s is string => !!s && s.length > 0);
 
-      const scheduleParsed = resolveScheduleFromReply(
+      const schedules = resolveAllSchedulesFromReply(
         userMessage.content,
         assistantMessage.content,
         new Date(),
         broaderHistory,
         activityLabelHints
       );
-      if (scheduleParsed) {
+      for (let i = 0; i < schedules.length; i++) {
+        const s = schedules[i];
         await persistAgentEvent({
-          id: `auto-${assistantMessage.id}-${Date.now()}`,
-          title: scheduleParsed.title,
-          dayIdx: scheduleParsed.dayIdx,
-          start: scheduleParsed.start,
-          end: scheduleParsed.end,
-          isoDate: scheduleParsed.isoDate,
+          id: `auto-${assistantMessage.id}-${Date.now()}-${i}`,
+          title: s.title,
+          dayIdx: s.dayIdx,
+          start: s.start,
+          end: s.end,
+          isoDate: s.isoDate,
         });
       }
     } catch (error: any) {
@@ -1582,23 +1823,25 @@ function DashboardContent() {
                         <button
                           type="button"
                           onClick={() => {
-                            const parsed = resolveScheduleFromReply(
+                            const list = resolveAllSchedulesFromReply(
                               pairedUserContent,
                               m.content,
                               new Date(),
                               broaderHistory,
                               scheduleActivityLabelHints
                             );
-                            if (!parsed) return alert("Failed to parse schedule from this message.");
-                            const newEvent = {
-                              id: `dynamic-${Date.now()}`,
-                              title: parsed.title,
-                              dayIdx: parsed.dayIdx,
-                              start: parsed.start,
-                              end: parsed.end,
-                              isoDate: parsed.isoDate,
-                            };
-                            persistAgentEvent(newEvent);
+                            if (list.length === 0) return alert("Failed to parse schedule from this message.");
+                            const t0 = Date.now();
+                            list.forEach((parsed, i) => {
+                              persistAgentEvent({
+                                id: `dynamic-${t0}-${i}`,
+                                title: parsed.title,
+                                dayIdx: parsed.dayIdx,
+                                start: parsed.start,
+                                end: parsed.end,
+                                isoDate: parsed.isoDate,
+                              });
+                            });
                             const toast = document.createElement("div");
                             toast.textContent = "Schedule updated!";
                             toast.className =
@@ -1849,7 +2092,7 @@ function DashboardContent() {
                         {event.title}
                       </div>
                       <div className="mt-1 text-[11px] text-slate-400 font-medium">
-                        {hourLabel(Math.floor(event.start))}&ndash;{hourLabel(Math.ceil(event.end))}
+                        {formatDecimalHourForDisplay(event.start)}&ndash;{formatDecimalHourForDisplay(event.end)}
                       </div>
                     </div>
                     );
@@ -1879,8 +2122,8 @@ function DashboardContent() {
             </div>
             <div className="mt-3 text-sm text-slate-500">
               {DAYS[calendarDetail.dayIdx] ?? "Day"} &middot;{" "}
-              {hourLabel(Math.floor(calendarDetail.start))} &ndash;{" "}
-              {hourLabel(Math.ceil(calendarDetail.end))}
+              {formatDecimalHourForDisplay(calendarDetail.start)} &ndash;{" "}
+              {formatDecimalHourForDisplay(calendarDetail.end)}
             </div>
             {!calendarDetail.isFixed && (
               <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800">
