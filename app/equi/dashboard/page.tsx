@@ -522,6 +522,65 @@ function canonicalizeActivityLabel(raw: string, activityLabels: string[]): strin
   return t;
 }
 
+/**
+ * Titles the model states explicitly in the latest assistant turn (e.g. 《Advanced Microeconomics》Assignment).
+ * Must run before profile-label matching on merged history, or "Economics Research" from old chat wins wrongly.
+ */
+function extractExplicitTitleFromAssistant(assistantMessage: string): string | null {
+  const a = normalizeDigitsForParse(assistantMessage);
+
+  let m = a.match(/《([^》]{2,80})》\s*(Assignment|作业)/i);
+  if (m) {
+    const title = m[1].replace(/\s+/g, " ").trim();
+    if (!isMetaScheduleTitle(title)) {
+      return (/作业/i.test(m[2]) ? `${title} 作业` : `${title} Assignment`).slice(0, 80);
+    }
+  }
+
+  m = a.match(/[更已新改].{0,56}?为[《「]([^》」]{2,80})[》」]/);
+  if (m) {
+    const title = m[1].replace(/\s+/g, " ").trim();
+    if (!isMetaScheduleTitle(title)) {
+      const tail = a.slice((m.index ?? 0) + m[0].length, (m.index ?? 0) + m[0].length + 28);
+      if (/^\s*(Assignment|作业)\b/i.test(tail)) {
+        return (/作业/.test(tail) ? `${title} 作业` : `${title} Assignment`).slice(0, 80);
+      }
+      return title.slice(0, 80);
+    }
+  }
+
+  m = a.match(/「([^」]{2,80})」\s*(?:Assignment|作业)?/);
+  if (m) {
+    const title = m[1].replace(/\s+/g, " ").trim();
+    if (!isMetaScheduleTitle(title)) return title.slice(0, 80);
+  }
+
+  m = a.match(/\bto\s+["'「]([^"'」]{2,80})["'」]/i);
+  if (m) {
+    const title = m[1].replace(/\s+/g, " ").trim();
+    if (!isMetaScheduleTitle(title)) return title.slice(0, 80);
+  }
+
+  m = a.match(/\b(Advanced\s+(?:Micro|Macro)economics\s+Assignment)\b/i);
+  if (m) return m[1].replace(/\s+/g, " ").trim().slice(0, 80);
+
+  return null;
+}
+
+function longestMatchingActivityLabels(text: string, activityLabels: string[]): string[] {
+  return Array.from(new Set(activityLabels.map((l) => l.trim()).filter((l) => l.length >= 2))).filter((L) => {
+    try {
+      const esc = L.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      if (/\s/.test(L)) {
+        return text.toLowerCase().includes(L.toLowerCase());
+      }
+      return new RegExp(`\\b${esc}\\b`, "i").test(text);
+    } catch {
+      return text.toLowerCase().includes(L.toLowerCase());
+    }
+  });
+}
+
 /** Pick a concrete calendar title from conversation + user's saved activity labels. */
 function extractBestScheduleTitle(
   userMessage: string,
@@ -529,30 +588,21 @@ function extractBestScheduleTitle(
   broaderHistory: string | undefined,
   activityLabels: string[]
 ): string {
+  const explicit = extractExplicitTitleFromAssistant(assistantMessage);
+  if (explicit) return explicit;
+
   const fromPair = extractSessionTitle(userMessage, assistantMessage);
   if (fromPair && !isMetaScheduleTitle(fromPair)) {
     return canonicalizeActivityLabel(fromPair.replace(/\s+/g, " ").trim(), activityLabels).slice(0, 80);
   }
 
+  const narrow = normalizeDigitsForParse(`${userMessage}\n${assistantMessage}`);
   const combined = normalizeDigitsForParse(`${userMessage}\n${assistantMessage}\n${broaderHistory ?? ""}`);
 
-  // Find all matching activity labels, keep the longest (most specific) one.
-  const matchingLabels = Array.from(
-    new Set(activityLabels.map((l) => l.trim()).filter((l) => l.length >= 2))
-  ).filter((L) => {
-    try {
-      const esc = L.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      if (/\s/.test(L)) {
-        return combined.toLowerCase().includes(L.toLowerCase());
-      }
-      return new RegExp(`\\b${esc}\\b`, "i").test(combined);
-    } catch {
-      return combined.toLowerCase().includes(L.toLowerCase());
-    }
-  });
-  if (matchingLabels.length > 0) {
-    const best = matchingLabels.sort((a, b) => b.length - a.length)[0];
-    return best.slice(0, 80);
+  // Profile labels: only match in current user + assistant turn (not broaderHistory).
+  const matchingNarrow = longestMatchingActivityLabels(narrow, activityLabels);
+  if (matchingNarrow.length > 0) {
+    return matchingNarrow.sort((a, b) => b.length - a.length)[0].slice(0, 80);
   }
 
   const keywordTitles: [RegExp, string][] = [
@@ -572,7 +622,11 @@ function extractBestScheduleTitle(
     [/跑步/, "Run"],
     [/会议|开会/, "Meeting"],
   ];
-  for (const [re, title] of [...keywordTitles].sort((a, b) => b[1].length - a[1].length)) {
+  const keywordSorted = [...keywordTitles].sort((a, b) => b[1].length - a[1].length);
+  for (const [re, title] of keywordSorted) {
+    if (re.test(narrow)) return title;
+  }
+  for (const [re, title] of keywordSorted) {
     if (re.test(combined)) return title;
   }
 
@@ -586,27 +640,13 @@ function extractTitleForProseRange(
   userMessage: string,
   broaderHistory: string | undefined
 ): string {
-  const combined = normalizeDigitsForParse(
-    `${userMessage}\n${assistantMessage}\n${broaderHistory ?? ""}`
-  );
+  const explicit = extractExplicitTitleFromAssistant(assistantMessage);
+  if (explicit) return explicit;
 
-  // Longest activity-label match wins first
-  const allLabels = Array.from(
-    new Set(activityLabels.map((l) => l.trim()).filter((l) => l.length >= 2))
-  );
-  if (allLabels.length > 0) {
-    const match = [...allLabels]
-      .sort((a, b) => b.length - a.length)
-      .find((L) => {
-        try {
-          const esc = L.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-          if (/\s/.test(L)) return combined.toLowerCase().includes(L.toLowerCase());
-          return new RegExp(`\\b${esc}\\b`, "i").test(combined);
-        } catch {
-          return combined.toLowerCase().includes(L.toLowerCase());
-        }
-      });
-    if (match) return match.slice(0, 80);
+  const narrow = normalizeDigitsForParse(`${userMessage}\n${assistantMessage}`);
+  const matchingNarrow = longestMatchingActivityLabels(narrow, activityLabels);
+  if (matchingNarrow.length > 0) {
+    return matchingNarrow.sort((a, b) => b.length - a.length)[0].slice(0, 80);
   }
 
   const sliceFrom = range.index;
