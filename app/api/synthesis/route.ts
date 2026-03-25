@@ -77,6 +77,45 @@ const MAX_HISTORY = 10;   // keep last 10 turns for context
 const MATCH_COUNT = 3;   // top-K knowledge chunks to retrieve
 
 // ---------------------------------------------------------------------------
+// chunk_type → Chinese semantic hint (used by inferChunkTypes)
+// ---------------------------------------------------------------------------
+
+const CHUNK_TYPE_HINTS: Record<string, string> = {
+  persona_summary:        "用户的基本信息（姓名、职业、简介）",
+  personality_analysis:   "用户的 MBTI 性格类型、拖延倾向、压力敏感度",
+  biological_clock:       "用户的专注力高峰和精力低谷时间段",
+  fixed_activities:       "用户每周的固定日程（Gym、上课、会议等），用于安排或调整日程时",
+  life_mode_context:      "用户当前的生活模式（正常/专注模式/度假等）",
+};
+
+/**
+ * Infer which chunk_type values to filter by from the user's question keywords.
+ * Returns an empty array when no signal is found (caller will fetch all types).
+ */
+function inferChunkTypes(message: string): string[] {
+  const m = message.toLowerCase();
+  const matched: string[] = [];
+
+  if (/mbti|性格|拖延|压力|工作\s*风格|personality|procrastination/i.test(m)) {
+    matched.push("personality_analysis");
+  }
+  if (/专注|高峰|精力|低谷|focus|energy|生物.?钟|几点/i.test(m)) {
+    matched.push("biological_clock");
+  }
+  if (/日程|安排|schedule|calendar|block|空出|预约|上课|gym|健身|class|会议|assignment|作业|课程|weekday|weekend|周一|周二|周三|周四|周五|周六|周日/i.test(m)) {
+    matched.push("fixed_activities");
+  }
+  if (/模式|mode|life|度假|holiday|恢复|recovery|旅行|travel/i.test(m)) {
+    matched.push("life_mode_context");
+  }
+  if (/我是谁|who am i|职业|occupation|简历|个人.?简介|about me/i.test(m)) {
+    matched.push("persona_summary");
+  }
+
+  return matched;
+}
+
+// ---------------------------------------------------------------------------
 // System Prompt Templates
 // ---------------------------------------------------------------------------
 
@@ -306,22 +345,46 @@ async function embedMessage(message: string): Promise<number[]> {
 
 async function retrieveKnowledge(
   queryEmbedding: number[],
-  userId: string
+  userId: string,
+  chunkTypes?: string[]
 ): Promise<MatchedKnowledge[]> {
   if (!supabaseAdmin) throw new Error("supabaseAdmin is not initialised");
 
-  const { data, error } = await supabaseAdmin.rpc("match_equi_knowledge", {
-    query_embedding: queryEmbedding,
-    p_user_id: userId,
-    p_match_count: MATCH_COUNT,
-  });
+  const filterTypes = chunkTypes && chunkTypes.length > 0 ? chunkTypes : null;
 
-  if (error) {
-    console.error("[synthesis] RPC match_equi_knowledge error:", error);
+  let result: { data: MatchedKnowledge[] | null; error: { message: string } | null };
+
+  if (filterTypes !== null) {
+    // Try new filtered RPC first; fall back if function not deployed yet.
+    try {
+      result = await supabaseAdmin.rpc("match_equi_knowledge_filtered", {
+        query_embedding: queryEmbedding,
+        p_user_id: userId,
+        p_match_count: MATCH_COUNT,
+        p_chunk_types: filterTypes,
+      });
+    } catch (_fallbackErr) {
+      // New function not in DB yet — use unfiltered original.
+      result = await supabaseAdmin.rpc("match_equi_knowledge", {
+        query_embedding: queryEmbedding,
+        p_user_id: userId,
+        p_match_count: MATCH_COUNT,
+      });
+    }
+  } else {
+    result = await supabaseAdmin.rpc("match_equi_knowledge", {
+      query_embedding: queryEmbedding,
+      p_user_id: userId,
+      p_match_count: MATCH_COUNT,
+    });
+  }
+
+  if (result.error) {
+    console.error("[synthesis] RPC error:", result.error);
     return []; // degrade gracefully — RAG failure shouldn't block chat
   }
 
-  return (data as MatchedKnowledge[]) ?? [];
+  return (result.data as MatchedKnowledge[]) ?? [];
 }
 
 // ---------------------------------------------------------------------------
@@ -489,9 +552,10 @@ async function handleRagChat(body: SynthesisBody, userId: string): Promise<NextR
   }
 
   // Step B — retrieve knowledge (degrades gracefully)
+  const relevantTypes = inferChunkTypes(message);
   let matchedKnowledge: MatchedKnowledge[] = [];
   try {
-    matchedKnowledge = await retrieveKnowledge(queryEmbedding, userId);
+    matchedKnowledge = await retrieveKnowledge(queryEmbedding, userId, relevantTypes);
   } catch (err) {
     console.warn("[synthesis/rag] Step B retrieval failed, continuing without RAG:", err);
   }
@@ -500,11 +564,12 @@ async function handleRagChat(body: SynthesisBody, userId: string): Promise<NextR
     location: "handleRagChat:postRetrieval",
     message: "RAG retrieval result",
     data: {
+      relevantTypes,
       matchedCount: matchedKnowledge.length,
       chunks: matchedKnowledge.map((k) => ({ type: k.metadata?.chunk_type, similarity: k.similarity, preview: k.content.slice(0, 80) })),
     },
-    hypothesisId: "E",
-    runId: "pre-fix",
+    hypothesisId: "F",
+    runId: "auto",
   });
 
   // Step C — build enhanced system prompt
