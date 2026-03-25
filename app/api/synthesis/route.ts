@@ -108,7 +108,7 @@ const SCHEDULE_INSTRUCTIONS = `
   Examples:
   💡 [SCHEDULE_UPDATE]: Deep Work Block | 14 | 16 | wed
   💡 [SCHEDULE_UPDATE]: Macroeconomics homework | 14 | 15 | wed | 2026-03-25
-- Title: plain text, MUST NOT contain | or line breaks.
+- Title: plain text, MUST NOT contain | or line breaks. Use the real activity the user asked for (e.g. Gym, Run, Thesis, Macroeconomics) — never generic placeholders like "Focus block", "Deep work", or "Calendar event" unless the user used those exact words.
 - startHour/endHour: integers 0-23 (24-hour), endHour > startHour.
 - day: mon/tue/wed/thu/fri/sat/sun (English, lowercase).
 - If the block is for "today", always include the 5th field YYYY-MM-DD using today's date given in the prompt (so it does not repeat every week).

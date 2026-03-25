@@ -292,22 +292,24 @@ function ActivityCard({
                   {((activity.flexibleQuota?.dailyMinutes ?? 60) / 60).toFixed(1)}h / day
                 </span>
               </div>
-              <input
-                type="range"
-                min="30"
-                max="480"
-                step="30"
-                value={activity.flexibleQuota?.dailyMinutes ?? 60}
-                onChange={(e) =>
-                  onUpdate({
-                    flexibleQuota: {
-                      dailyMinutes: Number(e.target.value),
-                      preferredSlot: activity.flexibleQuota?.preferredSlot ?? "anytime",
-                    },
-                  })
-                }
-                className="w-full accent-emerald-500"
-              />
+              <div className="flex w-full justify-center px-0.5">
+                <input
+                  type="range"
+                  min="30"
+                  max="480"
+                  step="30"
+                  value={activity.flexibleQuota?.dailyMinutes ?? 60}
+                  onChange={(e) =>
+                    onUpdate({
+                      flexibleQuota: {
+                        dailyMinutes: Number(e.target.value),
+                        preferredSlot: activity.flexibleQuota?.preferredSlot ?? "anytime",
+                      },
+                    })
+                  }
+                  className="block w-full max-w-full accent-emerald-500"
+                />
+              </div>
               <div className="flex gap-2">
                 {(["focusPeaks", "anytime"] as const).map((slot) => (
                   <button
@@ -336,14 +338,16 @@ function ActivityCard({
           {/* Hard constraint */}
           <div className="flex items-center gap-3">
             <button
+              type="button"
               onClick={() => onUpdate({ isHardConstraint: !activity.isHardConstraint })}
-              className={`w-9 h-5 rounded-full transition-all cursor-pointer relative ${
+              className={`h-5 w-9 shrink-0 rounded-full transition-colors cursor-pointer relative ${
                 activity.isHardConstraint ? "bg-emerald-500" : "bg-gray-200"
               }`}
+              aria-pressed={activity.isHardConstraint}
             >
               <span
-                className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                  activity.isHardConstraint ? "translate-x-4 left-0.5" : "translate-x-0.5"
+                className={`absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow transition-[left] duration-200 ${
+                  activity.isHardConstraint ? "left-[18px]" : "left-0.5"
                 }`}
               />
             </button>

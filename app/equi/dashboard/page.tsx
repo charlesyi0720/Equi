@@ -328,6 +328,50 @@ function extractSessionTitle(user: string, assistant: string): string | null {
   return null;
 }
 
+/** Pick a concrete calendar title from conversation + user's saved activity labels. */
+function extractBestScheduleTitle(
+  userMessage: string,
+  assistantMessage: string,
+  broaderHistory: string | undefined,
+  activityLabels: string[]
+): string {
+  const fromPair = extractSessionTitle(userMessage, assistantMessage);
+  if (fromPair) return fromPair.replace(/\s+/g, " ").trim().slice(0, 80);
+
+  const combined = normalizeDigitsForParse(`${userMessage}\n${assistantMessage}\n${broaderHistory ?? ""}`);
+
+  const sorted = Array.from(
+    new Set(activityLabels.map((l) => l.trim()).filter((l) => l.length >= 2))
+  ).sort((a, b) => b.length - a.length);
+  for (const label of sorted) {
+    try {
+      const esc = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      if (new RegExp(esc, "i").test(combined)) return label.slice(0, 80);
+    } catch {
+      if (combined.toLowerCase().includes(label.toLowerCase())) return label.slice(0, 80);
+    }
+  }
+
+  const keywordTitles: [RegExp, string][] = [
+    [/\b(gym|workout|lifting|lift\b|exercise|training)\b/i, "Gym"],
+    [/\b(run|running|jog(?:ging)?)\b/i, "Run"],
+    [/\b(swim|swimming)\b/i, "Swim"],
+    [/\b(thesis|dissertation)\b/i, "Thesis"],
+    [/\b(meeting|stand-?up|sync)\b/i, "Meeting"],
+    [/\b(class|lecture|seminar)\b/i, "Class"],
+    [/\b(homework|assignment|problem set|p-?set)\b/i, "Homework"],
+    [/\b(macro|macroeconomics)\b/i, "Macroeconomics"],
+    [/健身|健身房|锻炼/, "Gym"],
+    [/跑步/, "Run"],
+    [/会议|开会/, "Meeting"],
+  ];
+  for (const [re, title] of keywordTitles) {
+    if (re.test(combined)) return title;
+  }
+
+  return "Scheduled block";
+}
+
 /** Returns true when text contains a recognizable clock time. */
 function containsAnyTime(text: string): boolean {
   return /\b\d{1,2}:\d{2}\b|\b\d{1,2}\s*(?:am|pm)\b|点|上午|下午|晚上|早上|早晨|\d{1,2}\s*[-–]\s*\d{1,2}\s*点/i.test(text);
@@ -344,7 +388,8 @@ function inferScheduleFromConversation(
   userMessage: string,
   assistantMessage: string,
   now: Date,
-  broaderHistory?: string
+  broaderHistory: string | undefined,
+  activityLabels: string[]
 ): { title: string; dayIdx: number; start: number; end: number; isoDate?: string } | null {
   const combined = normalizeDigitsForParse(`${userMessage}\n${assistantMessage}\n${broaderHistory ?? ""}`);
 
@@ -361,12 +406,7 @@ function inferScheduleFromConversation(
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
 
   const { dayIdx, isoDate } = resolveDayFromText(combined, now);
-  const title = extractSessionTitle(userMessage, assistantMessage) ?? "Focus block";
-  const cleanTitle = title.replace(/\s+/g, " ").trim().slice(0, 80);
-  if (!cleanTitle) {
-    console.debug("[schedule] inferScheduleFromConversation: no title found");
-    return null;
-  }
+  const cleanTitle = extractBestScheduleTitle(userMessage, assistantMessage, broaderHistory, activityLabels);
   console.debug("[schedule] inferScheduleFromConversation: parsed:", { title: cleanTitle, start, end, dayIdx });
   return { title: cleanTitle, dayIdx, start, end, isoDate };
 }
@@ -375,10 +415,23 @@ function resolveScheduleFromReply(
   userMessage: string,
   assistantMessage: string,
   now: Date,
-  broaderHistory?: string
+  broaderHistory?: string,
+  activityLabels: string[] = []
 ): { title: string; dayIdx: number; start: number; end: number; isoDate?: string } | null {
-  return parseScheduleUpdateFromText(assistantMessage)
-    ?? inferScheduleFromConversation(userMessage, assistantMessage, now, broaderHistory);
+  const parsedTag = parseScheduleUpdateFromText(assistantMessage);
+  if (parsedTag) {
+    const generic = /^(focus\s*block|deep\s*work(\s*block)?|calendar\s*(block|event)?|scheduled\s*block)$/i.test(
+      parsedTag.title.trim()
+    );
+    if (generic) {
+      return {
+        ...parsedTag,
+        title: extractBestScheduleTitle(userMessage, assistantMessage, broaderHistory, activityLabels),
+      };
+    }
+    return parsedTag;
+  }
+  return inferScheduleFromConversation(userMessage, assistantMessage, now, broaderHistory, activityLabels);
 }
 
 function normalizeTitleForMerge(title: string): string {
@@ -999,11 +1052,16 @@ function DashboardContent() {
         .map((m) => m.content)
         .join("\n");
 
+      const activityLabelHints = (userData?.lifeStructure?.fixedActivities ?? [])
+        .map((a) => a.label?.trim())
+        .filter((s): s is string => !!s && s.length > 0);
+
       const scheduleParsed = resolveScheduleFromReply(
         userMessage.content,
         assistantMessage.content,
         new Date(),
-        broaderHistory
+        broaderHistory,
+        activityLabelHints
       );
       if (scheduleParsed) {
         await persistAgentEvent({
@@ -1137,6 +1195,10 @@ function DashboardContent() {
   }
 
   const name = userData?.understanding?.name || "User";
+
+  const scheduleActivityLabelHints = (userData.lifeStructure?.fixedActivities ?? [])
+    .map((a) => a.label?.trim())
+    .filter((s): s is string => !!s && s.length > 0);
 
   // Week column dates: Monday of the current week (using local time) as ISO strings.
   const userTz = typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "UTC";
@@ -1280,11 +1342,16 @@ function DashboardContent() {
         .map((m) => m.content)
         .join("\n");
 
+      const activityLabelHints = (userData?.lifeStructure?.fixedActivities ?? [])
+        .map((a) => a.label?.trim())
+        .filter((s): s is string => !!s && s.length > 0);
+
       const scheduleParsed = resolveScheduleFromReply(
         userMessage.content,
         assistantMessage.content,
         new Date(),
-        broaderHistory
+        broaderHistory,
+        activityLabelHints
       );
       if (scheduleParsed) {
         await persistAgentEvent({
@@ -1416,7 +1483,13 @@ function DashboardContent() {
                       m.role === "assistant" && prev?.role === "user" ? prev.content : "";
                     const scheduleForUi =
                       m.role === "assistant"
-                        ? resolveScheduleFromReply(pairedUserContent, m.content, new Date(), broaderHistory)
+                        ? resolveScheduleFromReply(
+                            pairedUserContent,
+                            m.content,
+                            new Date(),
+                            broaderHistory,
+                            scheduleActivityLabelHints
+                          )
                         : null;
                     return (
                     <div
@@ -1436,7 +1509,8 @@ function DashboardContent() {
                               pairedUserContent,
                               m.content,
                               new Date(),
-                              broaderHistory
+                              broaderHistory,
+                              scheduleActivityLabelHints
                             );
                             if (!parsed) return alert("Failed to parse schedule from this message.");
                             const newEvent = {
@@ -1668,14 +1742,26 @@ function DashboardContent() {
                           ? "border border-gray-200 bg-white"
                           : "border border-dashed border-gray-300 bg-white"
                       }`}
-                      style={{
-                        gridColumnStart: colStart,
-                        gridColumnEnd: colStart + 1,
-                        gridRowStart: Math.floor(event.start) + 2,
-                        gridRowEnd: Math.floor(event.end) + 2,
-                        width: laneCount > 1 ? `calc(${100 / laneCount}% - 8px)` : "calc(100% - 8px)",
-                        marginLeft: laneCount > 1 ? `${(laneIndex / laneCount) * 100}%` : "0",
-                      }}
+                      style={
+                        laneCount > 1
+                          ? {
+                              gridColumnStart: colStart,
+                              gridColumnEnd: colStart + 1,
+                              gridRowStart: Math.floor(event.start) + 2,
+                              gridRowEnd: Math.floor(event.end) + 2,
+                              width: `calc(${100 / laneCount}% - 6px)`,
+                              marginLeft: `calc(${(laneIndex / laneCount) * 100}% + 3px)`,
+                            }
+                          : {
+                              gridColumnStart: colStart,
+                              gridColumnEnd: colStart + 1,
+                              gridRowStart: Math.floor(event.start) + 2,
+                              gridRowEnd: Math.floor(event.end) + 2,
+                              justifySelf: "center",
+                              width: "calc(100% - 16px)",
+                              maxWidth: "100%",
+                            }
+                      }
                     >
                       <div className={`font-semibold line-clamp-2 leading-tight ${!event.isFixed ? "flex items-center gap-1.5 text-slate-800" : "text-slate-700"}`}>
                         {!event.isFixed && (
