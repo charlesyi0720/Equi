@@ -117,7 +117,7 @@ interface CalendarGridEvent {
 
 /** Matches machine-readable schedule line; supports ASCII and fullwidth pipe. Optional 5th field: YYYY-MM-DD for one-off events. */
 const SCHEDULE_UPDATE_LINE_RE =
-  /\[SCHEDULE_UPDATE:\s*([^\|\n\r\uFF5C]+?)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*([^\[\]\s\n\r]+?)(?:\s*[\|｜]\s*(\d{4}-\d{2}-\d{2}))?/i;
+  /\s*💡\s*\[SCHEDULE_UPDATE:\s*([^\|\n\r\uFF5C]+?)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*([^\[\]\s\n\r]+?)(?:\s*[\|｜]\s*(\d{4}-\d{2}-\d{2}))?/i;
 
 function parseScheduleUpdateFromText(
   text: string

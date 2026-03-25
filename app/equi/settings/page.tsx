@@ -521,10 +521,10 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Animated toast — fixed at bottom-center, slides up */}
+      {/* Animated toast — absolute to the top bar, right of the Save Changes button */}
       {saveMsg && (
         <div
-          className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-50 animate-toast-in ${
+          className={`absolute right-[calc(100%+0.75rem)] top-1/2 -translate-y-1/2 z-50 animate-toast-in ${
             saveMsg.type === "success"
               ? "rounded-2xl border border-emerald-200 bg-emerald-50 px-6 py-3 shadow-[0_4px_24px_rgba(16,185,129,0.2)]"
               : "rounded-2xl border border-rose-200 bg-rose-50 px-6 py-3 shadow-[0_4px_24px_rgba(244,63,94,0.15)]"
