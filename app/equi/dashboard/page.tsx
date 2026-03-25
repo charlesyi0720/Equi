@@ -172,8 +172,10 @@ function pmHour(h: number): number {
 
 /** Parse Chinese / plain time ranges when the model omits [SCHEDULE_UPDATE]: line. */
 function extractCnEnTimeRange(text: string): { start: number; end: number } | null {
-  const pmIdx = text.search(/下午/);
-  if (pmIdx >= 0) {
+  // Avoid matching 下午好 — require a digit soon after 下午/上午.
+  const pmHead = /下午\s*\d/.exec(text);
+  if (pmHead) {
+    const pmIdx = pmHead.index;
     const slice = text.slice(pmIdx, Math.min(text.length, pmIdx + 56));
     let m = slice.match(/(\d{1,2})\s*[-–至到～~]\s*(\d{1,2})\s*点/);
     if (m) {
@@ -184,8 +186,9 @@ function extractCnEnTimeRange(text: string): { start: number; end: number } | nu
       return { start: pmHour(parseInt(m[1], 10)), end: pmHour(parseInt(m[2], 10)) };
     }
   }
-  const amIdx = text.search(/上午|早上/);
-  if (amIdx >= 0) {
+  const amHead = /(?:上午|早上)\s*\d/.exec(text);
+  if (amHead) {
+    const amIdx = amHead.index;
     const slice = text.slice(amIdx, Math.min(text.length, amIdx + 56));
     const m =
       slice.match(/(\d{1,2})\s*[-–至到～~]\s*(\d{1,2})\s*点/) ??
