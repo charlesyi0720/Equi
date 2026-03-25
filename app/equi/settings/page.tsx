@@ -466,7 +466,11 @@ export default function SettingsPage() {
     try {
       const res = await fetch("/api/profile", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          "Cache-Control": "no-store",
+        },
         body: JSON.stringify({ user_data: merged }),
       });
       if (res.ok) {

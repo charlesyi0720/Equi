@@ -234,6 +234,39 @@ function extractCnEnTimeRange(text: string): { start: number; end: number } | nu
     const h = parseInt(m[1], 10);
     if (h >= 1 && h <= 11) return { start: h, end: h + 1 };
   }
+  // "10am", "10 am", "10pm", "10 pm", "10am–12pm", "10 – 12pm"
+  m = text.match(/\bat\s+(\d{1,2})\s*(am|pm)\b/i);
+  if (m) {
+    let h = parseInt(m[1], 10);
+    const suf = m[2].toLowerCase();
+    if (suf === "pm" && h < 12) h += 12;
+    if (suf === "am" && h === 12) h = 0;
+    if (h >= 0 && h <= 23) {
+      // Check if there's an end time nearby: "10am–12pm" or "10am - 12pm"
+      const after = text.slice(text.indexOf(m[0]) + m[0].length, text.indexOf(m[0]) + m[0].length + 20);
+      const endM = after.match(/^\s*[-–]\s*(\d{1,2})\s*(am|pm)?\b/i);
+      if (endM) {
+        let eh = parseInt(endM[1], 10);
+        const esuf = (endM[2] ?? suf).toLowerCase();
+        if (esuf === "pm" && eh < 12) eh += 12;
+        if (esuf === "am" && eh === 12) eh = 0;
+        if (eh > h) return { start: h, end: eh };
+      }
+      return { start: h, end: h + 1 };
+    }
+  }
+  // "10 – 12pm" (no "at")
+  m = text.match(/\b(\d{1,2})\s*[-–]\s*(\d{1,2})\s*(am|pm)\b/i);
+  if (m) {
+    let sh = parseInt(m[1], 10);
+    let eh = parseInt(m[2], 10);
+    const suf = m[3].toLowerCase();
+    if (suf === "pm" && eh < 12) eh += 12;
+    if (suf === "am" && eh === 12) eh = 0;
+    if (suf === "pm" && sh < 12) sh += 12;
+    if (suf === "am" && sh === 12) sh = 0;
+    if (eh > sh) return { start: sh, end: eh };
+  }
   return null;
 }
 
@@ -280,6 +313,12 @@ function extractSessionTitle(user: string, assistant: string): string | null {
   if (m) return m[1].trim();
   m = u.match(/(?:关于|做|完成)\s*([^\n，。！？]{2,40})/);
   if (m) return m[1].trim();
+  // "schedule your gym session" / "put your gym" / "reserve your morning run"
+  m = assistant.match(/(?:schedule|put|reserve|block)\s+your\s+([a-zA-Z][^.!?\n]{2,40}?)\s+(?:session|block|time)/i);
+  if (m) return m[1].trim();
+  // "your gym session" / "your gym" (no scheduling verb in immediate vicinity)
+  m = assistant.match(/\byour\s+([a-zA-Z][^.!?\n]{2,40}?)(?:\s+session|\s+block)?\b/i);
+  if (m) return m[1].trim();
   m = assistant.match(/(?:将|把)([^，,]{2,32}?)(?:安排|放在)/);
   if (m) return m[1].trim();
   m = assistant.match(/your\s+([a-zA-Z][^.!?\n]{1,48}?)\s+session/i);
@@ -293,9 +332,10 @@ function extractSessionTitle(user: string, assistant: string): string | null {
 function inferScheduleFromConversation(
   userMessage: string,
   assistantMessage: string,
-  now: Date
+  now: Date,
+  broaderHistory?: string
 ): { title: string; dayIdx: number; start: number; end: number; isoDate?: string } | null {
-  const combined = normalizeDigitsForParse(`${userMessage}\n${assistantMessage}`);
+  const combined = normalizeDigitsForParse(`${userMessage}\n${assistantMessage}\n${broaderHistory ?? ""}`);
   const assistantConfirms =
     /已(?:为|将)?您|已更新|更新了日程|安排在|加在|日程已经|为您更新|我已经|我会把|我会帮|我帮您/i.test(assistantMessage) ||
     /calendar|scheduled|I\s*(?:'ve| have| will| can)?\s*(?:scheduled|added|blocked|put|registered|confirmed|place)/i.test(
@@ -306,26 +346,40 @@ function inferScheduleFromConversation(
     /要|帮我|添加|安排|空出|focus|block|schedule|assignment|作业|学习|专注|apply\s*to\s*calendar|应用到日历/i.test(
       userMessage
     );
-  if (!assistantConfirms && !userWantsBlock) return null;
+
+  // Always try to extract if either side has scheduling signals
+  const timeOk =
+    (assistantConfirms && userWantsBlock) ||
+    (userWantsBlock && /would you like|should i|要不要|可以吗|could do|有没有|any time|which time|什么时候/i.test(assistantMessage));
+  if (!timeOk) return null;
 
   const hours = extractCnEnTimeRange(combined);
-  if (!hours) return null;
+  if (!hours) {
+    console.debug("[schedule] inferScheduleFromConversation: no time found in:", combined.slice(0, 120));
+    return null;
+  }
   const { start, end } = hours;
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
 
   const { dayIdx, isoDate } = resolveDayFromText(combined, now);
   const title = extractSessionTitle(userMessage, assistantMessage) ?? "Focus block";
   const cleanTitle = title.replace(/\s+/g, " ").trim().slice(0, 80);
-  if (!cleanTitle) return null;
+  if (!cleanTitle) {
+    console.debug("[schedule] inferScheduleFromConversation: no title found");
+    return null;
+  }
+  console.debug("[schedule] inferScheduleFromConversation: parsed:", { title: cleanTitle, start, end, dayIdx });
   return { title: cleanTitle, dayIdx, start, end, isoDate };
 }
 
 function resolveScheduleFromReply(
   userMessage: string,
   assistantMessage: string,
-  now: Date
+  now: Date,
+  broaderHistory?: string
 ): { title: string; dayIdx: number; start: number; end: number; isoDate?: string } | null {
-  return parseScheduleUpdateFromText(assistantMessage) ?? inferScheduleFromConversation(userMessage, assistantMessage, now);
+  return parseScheduleUpdateFromText(assistantMessage)
+    ?? inferScheduleFromConversation(userMessage, assistantMessage, now, broaderHistory);
 }
 
 function normalizeTitleForMerge(title: string): string {
@@ -940,10 +994,17 @@ function DashboardContent() {
         );
       }
 
+      const broaderHistory = (messagesSnapshotRef.current ?? [])
+        .slice(0, -2) // exclude the new user message + just-added assistant message
+        .slice(-6)    // last 6 messages for context
+        .map((m) => m.content)
+        .join("\n");
+
       const scheduleParsed = resolveScheduleFromReply(
         userMessage.content,
         assistantMessage.content,
-        new Date()
+        new Date(),
+        broaderHistory
       );
       if (scheduleParsed) {
         await persistAgentEvent({
@@ -1214,10 +1275,17 @@ function DashboardContent() {
         );
       }
 
+      const broaderHistory = (messagesSnapshotRef.current ?? [])
+        .slice(0, -2)
+        .slice(-6)
+        .map((m) => m.content)
+        .join("\n");
+
       const scheduleParsed = resolveScheduleFromReply(
         userMessage.content,
         assistantMessage.content,
-        new Date()
+        new Date(),
+        broaderHistory
       );
       if (scheduleParsed) {
         await persistAgentEvent({
@@ -1343,11 +1411,13 @@ function DashboardContent() {
                 <div className="space-y-3.5">
                   {messages.map((m, i) => {
                     const prev = i > 0 ? messages[i - 1] : null;
+                    // Build broader context: previous messages (excluding current assistant msg itself)
+                    const broaderHistory = messages.slice(Math.max(0, i - 6), i).map((x) => x.content).join("\n");
                     const pairedUserContent =
                       m.role === "assistant" && prev?.role === "user" ? prev.content : "";
                     const scheduleForUi =
                       m.role === "assistant"
-                        ? resolveScheduleFromReply(pairedUserContent, m.content, new Date())
+                        ? resolveScheduleFromReply(pairedUserContent, m.content, new Date(), broaderHistory)
                         : null;
                     return (
                     <div
@@ -1366,7 +1436,8 @@ function DashboardContent() {
                             const parsed = resolveScheduleFromReply(
                               pairedUserContent,
                               m.content,
-                              new Date()
+                              new Date(),
+                              broaderHistory
                             );
                             if (!parsed) return alert("Failed to parse schedule from this message.");
                             const newEvent = {

@@ -19,7 +19,10 @@ export async function embedUser(userData: EquiUser): Promise<{ ok: boolean; erro
     `${process.env.NEXT_PUBLIC_BASE_URL ?? ""}/api/embed`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-cache, no-store",
+      },
       body: JSON.stringify({ userId: userData.id, chunks }),
     }
   );
