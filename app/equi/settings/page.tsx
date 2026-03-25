@@ -503,55 +503,56 @@ export default function SettingsPage() {
             <BackIcon />
             Dashboard
           </a>
-          <div className="flex-1" />
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 transition-colors cursor-pointer"
-          >
-            {isSaving ? (
-              "Saving…"
-            ) : (
-              <>
-                <CheckIcon />
-                Save Changes
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* Animated toast — absolute to the top bar, right of the Save Changes button */}
-      {saveMsg && (
-        <div
-          className={`absolute right-[calc(100%+0.75rem)] top-1/2 -translate-y-1/2 z-50 animate-toast-in ${
-            saveMsg.type === "success"
-              ? "rounded-2xl border border-emerald-200 bg-emerald-50 px-6 py-3 shadow-[0_4px_24px_rgba(16,185,129,0.2)]"
-              : "rounded-2xl border border-rose-200 bg-rose-50 px-6 py-3 shadow-[0_4px_24px_rgba(244,63,94,0.15)]"
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            <div
-              className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${
-                saveMsg.type === "success" ? "bg-emerald-100 text-emerald-600" : "bg-rose-100 text-rose-600"
-              }`}
+          <div className="flex-1 min-w-0" />
+          <div className="flex items-center justify-end gap-3 shrink-0">
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 transition-colors cursor-pointer"
             >
-              {saveMsg.type === "success" ? (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
+              {isSaving ? (
+                "Saving…"
               ) : (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-                </svg>
+                <>
+                  <CheckIcon />
+                  Save Changes
+                </>
               )}
-            </div>
-            <span className={`text-sm font-semibold ${saveMsg.type === "success" ? "text-emerald-800" : "text-rose-800"}`}>
-              {saveMsg.text}
-            </span>
+            </button>
+            {saveMsg && (
+              <div
+                className={`animate-toast-in max-w-[min(16rem,calc(100vw-8rem))] ${
+                  saveMsg.type === "success"
+                    ? "rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 shadow-[0_4px_24px_rgba(16,185,129,0.2)]"
+                    : "rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 shadow-[0_4px_24px_rgba(244,63,94,0.15)]"
+                }`}
+                role="status"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${
+                      saveMsg.type === "success" ? "bg-emerald-100 text-emerald-600" : "bg-rose-100 text-rose-600"
+                    }`}
+                  >
+                    {saveMsg.type === "success" ? (
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    ) : (
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                      </svg>
+                    )}
+                  </div>
+                  <span className={`text-sm font-semibold whitespace-nowrap ${saveMsg.type === "success" ? "text-emerald-800" : "text-rose-800"}`}>
+                    {saveMsg.text}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      )}
+      </div>
 
       <div className="mx-auto max-w-2xl px-6 py-8 space-y-8">
         {/* Page title */}

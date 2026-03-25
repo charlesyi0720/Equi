@@ -115,14 +115,27 @@ interface CalendarGridEvent {
   isoDate?: string;
 }
 
-/** Matches machine-readable schedule line; supports ASCII and fullwidth pipe. Optional 5th field: YYYY-MM-DD for one-off events. */
+/** Matches machine-readable schedule line; supports ASCII and fullwidth pipe. Optional 5th field: YYYY-MM-DD for one-off events.
+ *  Canonical API format: 💡 [SCHEDULE_UPDATE]: Title | start | end | day [| date]  (closing ] before :)
+ *  Legacy typo: [SCHEDULE_UPDATE: Title | ... (no ] before colon)
+ */
 const SCHEDULE_UPDATE_LINE_RE =
-  /\s*💡\s*\[SCHEDULE_UPDATE:\s*([^\|\n\r\uFF5C]+?)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*([^\[\]\s\n\r]+?)(?:\s*[\|｜]\s*(\d{4}-\d{2}-\d{2}))?/i;
+  /(?:💡\s*)?\[SCHEDULE_UPDATE\]:\s*([^\|\n\r\uFF5C]+?)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*([^\[\]\s\n\r]+?)(?:\s*[\|｜]\s*(\d{4}-\d{2}-\d{2}))?/i;
+const SCHEDULE_UPDATE_LINE_RE_LEGACY =
+  /(?:💡\s*)?\[SCHEDULE_UPDATE:\s*([^\|\n\r\uFF5C]+?)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*([^\[\]\s\n\r]+?)(?:\s*[\|｜]\s*(\d{4}-\d{2}-\d{2}))?/i;
+
+/** Strip machine-readable schedule lines from chat display (canonical + legacy bracket typo). */
+function stripScheduleUpdateLines(text: string): string {
+  return text
+    .replace(/\s*💡?\s*\[SCHEDULE_UPDATE\]?:[^\n]+/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
 
 function parseScheduleUpdateFromText(
   text: string
 ): { title: string; dayIdx: number; start: number; end: number; isoDate?: string } | null {
-  const match = text.match(SCHEDULE_UPDATE_LINE_RE);
+  const match = text.match(SCHEDULE_UPDATE_LINE_RE) ?? text.match(SCHEDULE_UPDATE_LINE_RE_LEGACY);
   if (!match) return null;
   const [, titleRaw, startStr, endStr, dayRaw, isoDate] = match;
   const start = parseInt(startStr, 10);
@@ -1135,7 +1148,7 @@ function DashboardContent() {
                           : "max-w-[85%] rounded-2xl rounded-bl-md border border-gray-200 bg-white px-4 py-3 text-slate-800 shadow-[0_1px_4px_rgba(0,0,0,0.05)]"
                       }
                     >
-                      {m.content.replace(/\s*💡?\s*\[SCHEDULE_UPDATE\]:[^\n]*/g, "").trim()}
+                      {stripScheduleUpdateLines(m.content)}
                       {parseScheduleUpdateFromText(m.content) && (
                         <button
                           onClick={() => {
