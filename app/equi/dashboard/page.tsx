@@ -328,7 +328,18 @@ function extractSessionTitle(user: string, assistant: string): string | null {
   return null;
 }
 
-/** Fallback when the assistant replies in Chinese (or prose) without the machine-readable tag. */
+/** Returns true when text contains a recognizable clock time. */
+function containsAnyTime(text: string): boolean {
+  return /\b\d{1,2}:\d{2}\b|\b\d{1,2}\s*(?:am|pm)\b|点|上午|下午|晚上|早上|早晨|\d{1,2}\s*[-–]\s*\d{1,2}\s*点/i.test(text);
+}
+
+/** Returns true when either side of the conversation shows scheduling intent. */
+function hasSchedulingIntent(userText: string, assistantText: string): boolean {
+  return /要|帮我|添加|安排|空出|focus|block|schedule|assignment|作业|学习|专注|apply\s*to\s*calendar|应用到日历|put\s+your|schedule\s+your|reserve\s+your|should\s+i|would\s+you\s+like|要不要|可以吗/i.test(
+    `${userText}\n${assistantText}`
+  );
+}
+
 function inferScheduleFromConversation(
   userMessage: string,
   assistantMessage: string,
@@ -336,22 +347,10 @@ function inferScheduleFromConversation(
   broaderHistory?: string
 ): { title: string; dayIdx: number; start: number; end: number; isoDate?: string } | null {
   const combined = normalizeDigitsForParse(`${userMessage}\n${assistantMessage}\n${broaderHistory ?? ""}`);
-  const assistantConfirms =
-    /已(?:为|将)?您|已更新|更新了日程|安排在|加在|日程已经|为您更新|我已经|我会把|我会帮|我帮您/i.test(assistantMessage) ||
-    /calendar|scheduled|I\s*(?:'ve| have| will| can)?\s*(?:scheduled|added|blocked|put|registered|confirmed|place)/i.test(
-      assistantMessage
-    ) ||
-    /officially\s+registered|have\s+officially|registered\s+your/i.test(assistantMessage);
-  const userWantsBlock =
-    /要|帮我|添加|安排|空出|focus|block|schedule|assignment|作业|学习|专注|apply\s*to\s*calendar|应用到日历/i.test(
-      userMessage
-    );
 
-  // Always try to extract if either side has scheduling signals
-  const timeOk =
-    (assistantConfirms && userWantsBlock) ||
-    (userWantsBlock && /would you like|should i|要不要|可以吗|could do|有没有|any time|which time|什么时候/i.test(assistantMessage));
-  if (!timeOk) return null;
+  // Show button whenever assistant mentions a time AND either side has scheduling intent
+  if (!containsAnyTime(combined)) return null;
+  if (!hasSchedulingIntent(userMessage, assistantMessage)) return null;
 
   const hours = extractCnEnTimeRange(combined);
   if (!hours) {

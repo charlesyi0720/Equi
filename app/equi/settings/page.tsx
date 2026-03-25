@@ -414,7 +414,6 @@ export default function SettingsPage() {
 
   const addActivity = () => {
     setActivities((prev) => [
-      ...prev,
       {
         id: generateId(),
         label: "",
@@ -425,7 +424,9 @@ export default function SettingsPage() {
         flexibleQuota: { dailyMinutes: 60, preferredSlot: "anytime" },
         isHardConstraint: false,
       },
+      ...prev, // insert at top
     ]);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const updateActivity = (index: number, patch: Partial<EditableActivity>) => {
