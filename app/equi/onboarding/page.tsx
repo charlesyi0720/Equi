@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, Component } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { generateUserContextChunks } from "../lib/semanticParser";
+import { embedUser } from "../lib/embedUser";
 
 // Error Boundary for catching React errors
 class ErrorBoundary extends Component<
@@ -470,11 +472,7 @@ function OnboardingContent() {
       try {
         console.log("Starting data embedding...");
 
-        const userChunks = [
-          `Name: ${finalData?.understanding?.name || "User"}. MBTI: ${finalData?.understanding?.mbti || "Unknown"}. Preferred AI Persona: ${finalData?.understanding?.preferredAgentPersona || "Executive Assistant"}.`,
-          `Biological Clock Focus Peaks: ${JSON.stringify(finalData?.understanding?.biologicalClock?.focusPeaks || [])}. Energy Dips: ${JSON.stringify(finalData?.understanding?.biologicalClock?.energyDips || [])}.`,
-          `Fixed Life Structure Activities: ${JSON.stringify(finalData?.lifeStructure?.fixedActivities || [])}`,
-        ];
+        const userChunks = generateUserContextChunks(finalData as any);
 
         const embedRes = await fetch("/api/embed", {
           method: "POST",
@@ -490,19 +488,20 @@ function OnboardingContent() {
           console.error("Embedding API failed:", embedRes.status, errText);
           setEmbedError(`${embedRes.status}: ${errText}`);
           setEmbedStatus("error");
+          // Do NOT redirect on embed failure — stay so user can see the error banner
+          return;
         } else {
-          console.log("Embedding successful! Data written to Supabase pgvector.");
+          console.log("Embedding successful! Data written to Supabase pgvector.", await embedRes.json());
           setEmbedStatus("done");
+          // Only navigate after confirmed success
+          window.location.href = "/equi/dashboard";
         }
-      } catch (err) {
-        console.error("Network error during embedding:", err);
-        setEmbedError(String(err));
+      } catch (embedErr) {
+        console.error("Network error during embedding:", embedErr);
+        setEmbedError(String(embedErr));
         setEmbedStatus("error");
-      } finally {
-        // Hard-navigate to the real dashboard — bypass the Next.js client cache and mount the live app
-        window.location.href = "/equi/dashboard";
+        // Stay on page so user can retry
       }
-      
       // alert("Onboarding complete! Check console for EquiUser object.");
     } catch (error) {
       console.error("Error during submission:", error);
@@ -519,6 +518,31 @@ function OnboardingContent() {
     { number: 6, label: "Life Mode" },
     { number: 7, label: "Persona" },
   ];
+
+  const handleRetryEmbed = async () => {
+    const stored = localStorage.getItem("EQUI_USER_DATA");
+    if (!stored) {
+      setEmbedError("No user data found in localStorage.");
+      setEmbedStatus("error");
+      return;
+    }
+    const { user } = await getUser();
+    if (!user) {
+      setEmbedError("Not authenticated. Please log in again.");
+      setEmbedStatus("error");
+      return;
+    }
+    setEmbedStatus("embedding");
+    setEmbedError("");
+    const result = await embedUser({ ...JSON.parse(stored), id: user.id } as any);
+    if (result.ok) {
+      setEmbedStatus("done");
+      window.location.href = "/equi/dashboard";
+    } else {
+      setEmbedError(result.error ?? "Unknown error");
+      setEmbedStatus("error");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
@@ -552,7 +576,7 @@ function OnboardingContent() {
         <>
         {isSubmitted && submittedUser ? (
           <div className="mx-auto w-full max-w-7xl px-6 py-6 lg:py-8">
-            <SummaryView user={submittedUser} embedStatus={embedStatus} embedError={embedError} />
+            <SummaryView user={submittedUser} embedStatus={embedStatus} embedError={embedError} onRetryEmbed={handleRetryEmbed} />
           </div>
         ) : (
         <div className="max-w-2xl mx-auto px-6 py-12">
@@ -1421,9 +1445,10 @@ interface SummaryViewProps {
   user: EquiUser;
   embedStatus: "idle" | "embedding" | "done" | "error";
   embedError: string;
+  onRetryEmbed?: () => void;
 }
 
-function SummaryView({ user, embedStatus, embedError }: SummaryViewProps) {
+function SummaryView({ user, embedStatus, embedError, onRetryEmbed }: SummaryViewProps) {
   const name = user?.understanding?.name || "User";
 
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
@@ -1496,6 +1521,22 @@ function SummaryView({ user, embedStatus, embedError }: SummaryViewProps) {
             <span>Knowledge embedding failed. RAG features may be limited.</span>
           </div>
           <div className="text-xs text-rose-500 font-mono">{embedError}</div>
+          <div className="mt-2 flex items-center gap-3">
+            {onRetryEmbed && (
+              <button
+                onClick={onRetryEmbed}
+                className="rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-100 transition-colors cursor-pointer"
+              >
+                Retry Sync
+              </button>
+            )}
+            <a
+              href="/equi/dashboard"
+              className="text-xs text-rose-400 hover:text-rose-600 underline transition-colors"
+            >
+              Go to Dashboard anyway
+            </a>
+          </div>
         </div>
       )}
 

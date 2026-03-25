@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { EquiUser, FixedActivity, ActivitySlot, CognitiveCategory, Weekday } from "../types";
 import { supabase } from "../lib/supabase";
+import { embedUser } from "../lib/embedUser";
 
 // ─── Icons ───────────────────────────────────────────────────────────────────
 
@@ -471,6 +472,12 @@ export default function SettingsPage() {
       if (res.ok) {
         setUserData(merged);
         setSaveMsg({ type: "success", text: "Changes saved" });
+        // Re-sync knowledge graph so the agent sees updated fixed activities immediately.
+        if (userData?.id) {
+          embedUser({ ...merged, id: userData.id } as any).catch((e) =>
+            console.warn("[settings] Re-embed failed:", e)
+          );
+        }
       } else {
         const err = await res.json().catch(() => ({}));
         setSaveMsg({ type: "error", text: err.error ?? "Save failed" });

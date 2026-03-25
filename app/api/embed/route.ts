@@ -3,7 +3,6 @@
  *
  * Embeds an array of natural-language chunks into Supabase pgvector via
  * Gemini text-embedding-004 (768-dim), then upserts them into the equi_knowledge table.
- * Use the helper in @/app/equi/lib/embedUser to embed a full EquiUser in one call.
  *
  * Table contract (confirmed via probing):
  *   user_id   UUID     NOT NULL REFERENCES auth.users(id)

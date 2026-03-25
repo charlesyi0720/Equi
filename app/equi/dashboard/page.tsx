@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useMemo, FormEvent } from "react";
 import { EquiUser, StoredMessage, ConversationSession } from "../types";
 import { supabase } from "../lib/supabase";
 import { onAuthStateChange, signOut } from "../lib/auth";
+import { generateUserContextChunks } from "../lib/semanticParser";
 
 // SVG Icon Components
 const SparkleIcon = () => (
@@ -828,12 +829,16 @@ function DashboardContent() {
       content: m.content,
     }));
 
+    const allChunks = userData ? generateUserContextChunks(userData) : [];
+    const fixedActivitiesSummary = allChunks[3] ?? "";
+
     const userContext = {
       name: userData?.understanding?.name,
       mbti: userData?.understanding?.mbti,
       focusPeaks: userData?.understanding?.biologicalClock?.focusPeaks,
       energyDips: userData?.understanding?.biologicalClock?.energyDips,
       preferredAgentPersona: userData?.understanding?.preferredAgentPersona,
+      fixedActivitiesSummary,
     };
 
     try {
@@ -1092,12 +1097,16 @@ function DashboardContent() {
       content: m.content,
     }));
 
+    const allChunks = userData ? generateUserContextChunks(userData) : [];
+    const fixedActivitiesSummary = allChunks[3] ?? "";
+
     const userContext = {
       name: userData?.understanding?.name,
       mbti: userData?.understanding?.mbti,
       focusPeaks: userData?.understanding?.biologicalClock?.focusPeaks,
       energyDips: userData?.understanding?.biologicalClock?.energyDips,
       preferredAgentPersona: userData?.understanding?.preferredAgentPersona,
+      fixedActivitiesSummary,
     };
 
     try {

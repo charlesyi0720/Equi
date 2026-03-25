@@ -2,7 +2,7 @@
  * Synthesis API Route — RAG-enabled Conversational AI
  *
  * Data flow per POST /api/synthesis:
- *   Step A: Embed user message → Gemini gemini-embedding-001 (768-dim)
+ *   Step A: Embed user message → Gemini text-embedding-004 (768-dim)
  *   Step B: Semantic search   → Supabase RPC match_equi_knowledge (top-3)
  *   Step C: Inject knowledge  → Enhanced system prompt → Gemini generateContent
  *
@@ -36,7 +36,7 @@ interface SynthesisMessage {
   content: string;
 }
 
-interface SynthesisBody {
+  interface SynthesisBody {
   isGreeting?: boolean;
   message?: string;
   conversationHistory?: SynthesisMessage[];
@@ -57,6 +57,8 @@ interface SynthesisBody {
     }>;
     todaySchedule?: string;
     preferredAgentPersona?: string;
+    /** Human-readable summary of the user's fixed activities (gym, class, etc.). */
+    fixedActivitiesSummary?: string;
   };
 }
 
@@ -66,7 +68,7 @@ interface MatchedKnowledge {
   similarity: number;
 }
 
-const EMBEDDING_MODEL = "gemini-embedding-001";
+const EMBEDDING_MODEL = "text-embedding-004";
 /** Gemini 3.1 Flash-Lite (preview) — cost/latency friendly for high-volume chat. */
 const CHAT_MODEL = "gemini-3.1-flash-lite-preview";
 const MAX_HISTORY = 10;   // keep last 10 turns for context
@@ -176,7 +178,7 @@ function buildSystemPrompt(
   localTimeStr?: string,
   scheduleTagMandatory?: boolean
 ): string {
-  const { mbti, name, focusPeaks, energyDips, todaySchedule, preferredAgentPersona } =
+  const { mbti, name, focusPeaks, energyDips, todaySchedule, preferredAgentPersona, fixedActivitiesSummary } =
     userData ?? {};
 
   const tz = timezone || "UTC";
@@ -217,6 +219,10 @@ function buildSystemPrompt(
     ? `Today's schedule summary: ${todaySchedule}`
     : "";
 
+  const fixedActivitiesLine = fixedActivitiesSummary
+    ? `[Fixed Activities — DO NOT schedule over these without the user's explicit consent]\n${fixedActivitiesSummary}`
+    : "";
+
   const languageRule =
     "CRITICAL RULE: You MUST respond entirely in the language the user is currently typing in (e.g., reply in English if the user types in English. DO NOT force Chinese).";
 
@@ -233,6 +239,7 @@ function buildSystemPrompt(
     focusLine,
     dipLine,
     scheduleLine,
+    fixedActivitiesLine,
     TONE_INSTRUCTIONS,
     BREVITY_INSTRUCTIONS,
     SCHEDULE_INSTRUCTIONS,
@@ -245,7 +252,7 @@ function buildSystemPrompt(
 }
 
 // ---------------------------------------------------------------------------
-// Step A: Embed user message with Gemini gemini-embedding-001
+// Step A: Embed user message with Gemini text-embedding-004
 // ---------------------------------------------------------------------------
 
 async function embedMessage(message: string): Promise<number[]> {
@@ -453,6 +460,17 @@ async function handleRagChat(body: SynthesisBody, userId: string): Promise<NextR
   } catch (err) {
     console.warn("[synthesis/rag] Step B retrieval failed, continuing without RAG:", err);
   }
+
+  log({
+    location: "handleRagChat:postRetrieval",
+    message: "RAG retrieval result",
+    data: {
+      matchedCount: matchedKnowledge.length,
+      chunks: matchedKnowledge.map((k) => ({ type: k.metadata?.chunk_type, similarity: k.similarity, preview: k.content.slice(0, 80) })),
+    },
+    hypothesisId: "E",
+    runId: "pre-fix",
+  });
 
   // Step C — build enhanced system prompt
   const ragContext = buildRagContext(matchedKnowledge);
