@@ -74,7 +74,7 @@ CREATE OR REPLACE FUNCTION get_recent_messages(
   p_session_id TEXT,
   p_limit      INTEGER DEFAULT 20
 )
-RETURNS TABLE(id uuid, session_id text, role text, content text, timestamp timestamptz)
+RETURNS TABLE(id uuid, "session_id" text, "role" text, content text, "timestamp" timestamptz)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -97,7 +97,7 @@ CREATE OR REPLACE FUNCTION get_sessions_preview(
   p_user_id UUID,
   p_limit   INTEGER DEFAULT 10
 )
-RETURNS TABLE(session_id text, last_message text, last_timestamp timestamptz, message_count bigint)
+RETURNS TABLE("session_id" text, last_message text, last_timestamp timestamptz, message_count bigint)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -130,7 +130,7 @@ CREATE OR REPLACE FUNCTION get_messages_for_extract(
   p_session_id TEXT,
   p_limit      INTEGER DEFAULT 20
 )
-RETURNS TABLE(role text, content text, timestamp timestamptz)
+RETURNS TABLE("role" text, content text, "timestamp" timestamptz)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
