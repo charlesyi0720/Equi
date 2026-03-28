@@ -181,6 +181,10 @@ export interface BehaviorPattern {
 export interface LongTermMemory {
   planningOutcomes: PlanningOutcome[];
   behaviorPatterns: BehaviorPattern[];
+  /** Increments after each exchange; reset to 0 when memory extraction fires. */
+  conversationMessagesSinceLastExtract: number;
+  /** ISO timestamp of the last memory extraction run. */
+  lastExtractAt?: string;
 }
 
 export interface SundaySyncConfig {

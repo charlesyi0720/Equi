@@ -23,6 +23,11 @@ const CHUNK_TYPE_LABELS = [
   "life_mode_context",
 ] as const;
 
+// Learned preferences are written by memory-extract, not by embedUser.
+// This label is here for reference only — do NOT add to CHUNK_TYPE_LABELS
+// or embedUser will try to write them on every profile save.
+const LEARNED_PREFERENCE_LABEL = "learned_preference";
+
 // ---------------------------------------------------------------------------
 // GET health check
 // ---------------------------------------------------------------------------

@@ -86,6 +86,7 @@ const CHUNK_TYPE_HINTS: Record<string, string> = {
   biological_clock:       "用户的专注力高峰和精力低谷时间段",
   fixed_activities:       "用户每周的固定日程（Gym、上课、会议等），用于安排或调整日程时",
   life_mode_context:      "用户当前的生活模式（正常/专注模式/度假等）",
+  learned_preference:      "用户在对话中流露的长期偏好、习惯或约束（Agent 提炼的）",
 };
 
 /**
@@ -110,6 +111,10 @@ function inferChunkTypes(message: string): string[] {
   }
   if (/我是谁|who am i|职业|occupation|简历|个人.?简介|about me/i.test(m)) {
     matched.push("persona_summary");
+  }
+
+  if (/偏好|习惯|constraint|约束|我发现|usually|always|never|normally|tend to/i.test(m)) {
+    matched.push("learned_preference");
   }
 
   return matched;

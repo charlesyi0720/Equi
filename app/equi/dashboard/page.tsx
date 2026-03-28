@@ -1063,6 +1063,7 @@ function DashboardContent() {
   const [showResumeDialog, setShowResumeDialog] = useState(false);
   const [pendingSession, setPendingSession] = useState<ConversationSession | null>(null);
   const currentSessionIdRef = useRef<string | null>(null);
+  const userDataRef = useRef<EquiUser | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   const handleLogout = async () => {
@@ -1086,14 +1087,50 @@ function DashboardContent() {
     setUserData(merged);
     currentSessionIdRef.current = sessionId;
 
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
+    const { data: { session: authSession } } = await supabase.auth.getSession();
+    const token = authSession?.access_token;
     if (!token) return;
     await fetch("/api/profile", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ user_data: merged }),
     }).catch(() => {});
+  };
+
+  /** Insert a single message into conversation_messages (Layer 1). */
+  const persistMessage = async (msg: Message, sessionId: string) => {
+    const session = await supabase?.auth.getSession();
+    const token = session?.data?.session?.access_token;
+    if (!token) return;
+    fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/conversation`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ sessionId, role: msg.role, content: msg.content }),
+    }).catch(() => {});
+  };
+
+  /**
+   * Load recent messages for a session from conversation_messages table.
+   * Falls back to the JSONB session.messages if the table row is empty (migration period).
+   */
+  const loadSessionMessages = async (sessionId: string, jsonMessages?: Message[]): Promise<Message[]> => {
+    const session = await supabase?.auth.getSession();
+    const token = session?.data?.session?.access_token;
+    if (!token) return jsonMessages ?? [];
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BASE_URL}/api/conversation?sessionId=${encodeURIComponent(sessionId)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!res.ok) return jsonMessages ?? [];
+      const json = await res.json();
+      if (Array.isArray(json.messages) && json.messages.length > 0) {
+        return json.messages as Message[];
+      }
+    } catch {
+      // fall through
+    }
+    return jsonMessages ?? [];
   };
 
   // Start a brand-new conversation session.
@@ -1107,10 +1144,11 @@ function DashboardContent() {
   };
 
   // Resume a previous session.
-  const continueSession = (session: ConversationSession) => {
+  const continueSession = async (session: ConversationSession) => {
     currentSessionIdRef.current = session.id;
     setActiveSessionId(session.id);
-    setMessages(session.messages);
+    const msgs = await loadSessionMessages(session.id, session.messages);
+    setMessages(msgs);
     setShowResumeDialog(false);
   };
 
@@ -1165,6 +1203,12 @@ function DashboardContent() {
           if (prevSession && prevSession.messages.length > 0) {
             setPendingSession(prevSession);
             setShowResumeDialog(true);
+          }
+
+          // Load messages from conversation_messages table (Layer 1)
+          const msgs = await loadSessionMessages(activeId, prevSession?.messages);
+          if (msgs.length > 0) {
+            setMessages(msgs);
           }
         }
         setIsLoading(false);
@@ -1222,6 +1266,7 @@ function DashboardContent() {
   // Keep snapshot ref in sync so async persistSession reads fresh messages.
   useEffect(() => {
     messagesSnapshotRef.current = messages;
+    userDataRef.current = userData;
   }, [messages]);
 
   // Auto-trigger opening message (only when no resume dialog is pending)
@@ -1412,6 +1457,10 @@ function DashboardContent() {
     setInputValue("");
     setIsStreaming(true);
 
+    // Layer 1: persist user message to conversation_messages table
+    const sid = currentSessionIdRef.current;
+    persistMessage(userMessage, sid ?? "");
+
     // Use snapshot to avoid stale closure.
     const currentMsgs = messagesSnapshotRef.current;
     const conversationHistory = [...currentMsgs, userMessage].map((m) => ({
@@ -1461,24 +1510,24 @@ function DashboardContent() {
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
-      
+
       const assistantMessage: Message = {
         id: generateId(),
         role: "assistant",
         content: "",
         timestamp: new Date().toISOString(),
       };
-      
+
       setMessages((prev) => [...prev, assistantMessage]);
 
       while (true) {
         const { done, value } = await reader!.read();
         if (done) break;
-        
+
         const chunk = decoder.decode(value, { stream: true });
         assistantMessage.content += chunk;
-        
-        setMessages((prev) => 
+
+        setMessages((prev) =>
           prev.map((m, i) => i === prev.length - 1 ? { ...m, content: assistantMessage.content } : m)
         );
       }
@@ -1530,9 +1579,56 @@ function DashboardContent() {
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsStreaming(false);
-      // Persist updated session after every exchange (use snapshot to avoid stale closure).
       const sid = currentSessionIdRef.current;
-      if (sid) persistSession(sid, messagesSnapshotRef.current);
+      if (!sid) return;
+
+      const finalMessages = messagesSnapshotRef.current;
+      persistSession(sid, finalMessages);
+
+      // Layer 1: persist assistant message (only available if try block succeeded)
+      if (finalMessages.length > 0) {
+        const lastMsg = finalMessages[finalMessages.length - 1];
+        if (lastMsg?.role === "assistant") persistMessage(lastMsg, sid);
+      }
+
+      // Layer 2: Memory counter — trigger extraction every N exchanges
+      const currentCount = finalMessages.length;
+      const EXTRACT_EVERY = 10;
+      if (currentCount > 0 && currentCount % EXTRACT_EVERY === 0) {
+        const ud = userDataRef.current;
+        const session = await supabase?.auth.getSession();
+        const token = session?.data?.session?.access_token;
+        if (token && ud?.id) {
+          fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/memory-extract`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ userId: ud.id, sessionId: sid }),
+          }).catch(() => {});
+        }
+      } else {
+        const ud = userDataRef.current;
+        const session = await supabase?.auth.getSession();
+        const token = session?.data?.session?.access_token;
+        if (token && ud?.id) {
+          const ltm = ud.agentBrain?.longTermMemory ?? {};
+          fetch("/api/profile", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              user_data: {
+                ...ud,
+                agentBrain: {
+                  ...(ud.agentBrain ?? {}),
+                  longTermMemory: {
+                    ...ltm,
+                    conversationMessagesSinceLastExtract: (ltm.conversationMessagesSinceLastExtract ?? 0) + 1,
+                  },
+                },
+              },
+            }),
+          }).catch(() => {});
+        }
+      }
     }
   };
 

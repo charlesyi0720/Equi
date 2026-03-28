@@ -382,6 +382,7 @@ function OnboardingContent() {
         longTermMemory: {
           planningOutcomes: [],
           behaviorPatterns: [],
+          conversationMessagesSinceLastExtract: 0,
         },
         sundaySync: {
           config: {

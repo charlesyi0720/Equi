@@ -461,6 +461,13 @@ export default function SettingsPage() {
           isHardConstraint: a.isHardConstraint,
         })),
       },
+      agentBrain: {
+        ...(userData.agentBrain ?? {}),
+        longTermMemory: {
+          ...(userData.agentBrain?.longTermMemory ?? {}),
+          conversationMessagesSinceLastExtract: 0,
+        },
+      },
     };
 
     if (!supabase) { setIsSaving(false); return; }

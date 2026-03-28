@@ -241,6 +241,23 @@ function parseLifeModeContext(user: EquiUser): string {
   ].join(" ");
 }
 
+function parseLearnedPreferences(user: EquiUser): string {
+  const { name } = user.understanding;
+  const patterns = user.agentBrain?.longTermMemory?.behaviorPatterns ?? [];
+
+  if (patterns.length === 0) {
+    return `${name} 尚未通过对话提炼出长期偏好。`;
+  }
+
+  const lines = [`${name} 通过对话提炼出的长期偏好如下：`];
+  for (const p of patterns) {
+    const conf = p.confidence != null ? `（置信度 ${Math.round((p.confidence ?? 0) * 100)}%）` : "";
+    lines.push(`— ${p.description}${conf}`);
+  }
+
+  return lines.join(" ");
+}
+
 // ---------------------------------------------------------------------------
 // Main export
 // ---------------------------------------------------------------------------
@@ -265,6 +282,7 @@ export function generateUserContextChunks(userData: EquiUser): string[] {
   chunks.push(parseFixedActivities(userData));
   chunks.push(parseFlexibleActivities(userData));
   chunks.push(parseLifeModeContext(userData));
+  chunks.push(parseLearnedPreferences(userData));
 
   return chunks.filter((c) => c.length > 0);
 }
