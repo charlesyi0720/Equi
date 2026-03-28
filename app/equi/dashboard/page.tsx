@@ -1036,6 +1036,8 @@ function DashboardContent() {
   const calendarScrollRef = useRef<HTMLDivElement>(null);
   const messagesSnapshotRef = useRef<Message[]>([]);
   const [calendarDetail, setCalendarDetail] = useState<CalendarGridEvent | null>(null);
+  /** While non-null, a calendar apply is in progress (Gemini title + persist). */
+  const [calendarApplyLoadingId, setCalendarApplyLoadingId] = useState<string | null>(null);
 
   // ---------------------------------------------------------------------------
   // Delete an agent event by id from all state + Supabase.
@@ -2055,7 +2057,8 @@ function DashboardContent() {
                       {scheduleForUi && (
                         <button
                           type="button"
-                          onClick={() => {
+                          disabled={calendarApplyLoadingId !== null || isStreaming}
+                          onClick={async () => {
                             const list = resolveAllSchedulesFromReply(
                               pairedUserContent,
                               m.content,
@@ -2064,32 +2067,73 @@ function DashboardContent() {
                               scheduleActivityLabelHints
                             );
                             if (list.length === 0) return alert("Failed to parse schedule from this message.");
-                            const t0 = Date.now();
-                            list.forEach((parsed, i) => {
-                              persistAgentEvent({
-                                id: `dynamic-${t0}-${i}`,
-                                title: parsed.title,
-                                dayIdx: parsed.dayIdx,
-                                start: parsed.start,
-                                end: parsed.end,
-                                isoDate: parsed.isoDate,
+                            setCalendarApplyLoadingId(m.id);
+                            try {
+                              let titles = list.map((p) => p.title);
+                              try {
+                                const auth = await supabase?.auth.getSession();
+                                const token = auth?.data?.session?.access_token;
+                                if (token) {
+                                  const slots = list.map((parsed) => ({
+                                    slotLabel: `${DAYS[parsed.dayIdx]} ${formatDecimalHourForDisplay(parsed.start)}–${formatDecimalHourForDisplay(parsed.end)}${parsed.isoDate ? ` · ${parsed.isoDate}` : ""}`,
+                                    fallbackTitle: parsed.title,
+                                  }));
+                                  const res = await fetch("/api/calendar-title", {
+                                    method: "POST",
+                                    headers: {
+                                      "Content-Type": "application/json",
+                                      Authorization: `Bearer ${token}`,
+                                    },
+                                    body: JSON.stringify({
+                                      userMessage: pairedUserContent,
+                                      assistantMessage: m.content,
+                                      broaderHistory,
+                                      activityLabels: scheduleActivityLabelHints,
+                                      slots,
+                                    }),
+                                  });
+                                  if (res.ok) {
+                                    const data = (await res.json()) as { titles?: unknown };
+                                    if (Array.isArray(data.titles) && data.titles.length === list.length) {
+                                      titles = data.titles.map((t, i) => {
+                                        const s = typeof t === "string" ? t.replace(/\s+/g, " ").trim().slice(0, 80) : "";
+                                        return s || list[i].title;
+                                      });
+                                    }
+                                  }
+                                }
+                              } catch (e) {
+                                console.warn("[calendar] title API failed, using heuristic titles", e);
+                              }
+                              const t0 = Date.now();
+                              list.forEach((parsed, i) => {
+                                persistAgentEvent({
+                                  id: `dynamic-${t0}-${i}`,
+                                  title: titles[i] ?? parsed.title,
+                                  dayIdx: parsed.dayIdx,
+                                  start: parsed.start,
+                                  end: parsed.end,
+                                  isoDate: parsed.isoDate,
+                                });
                               });
-                            });
-                            const toast = document.createElement("div");
-                            toast.textContent = "Schedule updated!";
-                            toast.className =
-                              "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl bg-emerald-600 text-white px-5 py-2.5 text-sm font-semibold shadow-lg animate-[fade-up_0.3s_ease-out]";
-                            document.body.appendChild(toast);
-                            setTimeout(() => {
-                              toast.style.opacity = "0";
-                              toast.style.transition = "opacity 0.3s";
-                              setTimeout(() => toast.remove(), 300);
-                            }, 2800);
+                              const toast = document.createElement("div");
+                              toast.textContent = "Schedule updated!";
+                              toast.className =
+                                "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl bg-emerald-600 text-white px-5 py-2.5 text-sm font-semibold shadow-lg animate-[fade-up_0.3s_ease-out]";
+                              document.body.appendChild(toast);
+                              setTimeout(() => {
+                                toast.style.opacity = "0";
+                                toast.style.transition = "opacity 0.3s";
+                                setTimeout(() => toast.remove(), 300);
+                              }, 2800);
+                            } finally {
+                              setCalendarApplyLoadingId(null);
+                            }
                           }}
-                          className="mt-3 w-full rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 px-4 py-2.5 text-xs font-semibold text-amber-700 hover:from-amber-100 hover:to-orange-100 hover:border-amber-300 transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5"
+                          className="mt-3 w-full rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 px-4 py-2.5 text-xs font-semibold text-amber-700 hover:from-amber-100 hover:to-orange-100 hover:border-amber-300 transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-amber-50 disabled:hover:to-orange-50"
                         >
                           <SparkleIcon />
-                          Apply to Calendar
+                          {calendarApplyLoadingId === m.id ? "Naming…" : "Apply to Calendar"}
                         </button>
                       )}
                     </div>
