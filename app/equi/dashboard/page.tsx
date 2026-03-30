@@ -1080,7 +1080,7 @@ function DashboardContent() {
   // Auto-Healing: 液态日程重组
   // ---------------------------------------------------------------------------
   const handleAutoHeal = async () => {
-    if (!userData || isHealing) return;
+    if (!userData || isHealing || !supabase) return;
 
     setIsHealing(true);
     try {
