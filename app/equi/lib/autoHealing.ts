@@ -34,10 +34,11 @@ export function healSchedule(
   currentTime: Date,
   fixedActivities: FixedActivity[],
   biologicalClock: BiologicalClock,
-  existingEvents: CalendarAgentEvent[]
+  existingEvents: CalendarAgentEvent[],
+  disruptionSlot?: { start: number; end: number }
 ): HealedSchedule[] {
   const healed: HealedSchedule[] = [];
-  const availableSlots = findAvailableSlots(currentTime, fixedActivities, existingEvents);
+  const availableSlots = findAvailableSlots(currentTime, fixedActivities, existingEvents, disruptionSlot);
 
   // 按优先级和截止日期排序
   const sortedTasks = [...tasks].sort((a, b) => {
@@ -64,7 +65,8 @@ export function healSchedule(
 function findAvailableSlots(
   currentTime: Date,
   fixedActivities: FixedActivity[],
-  existingEvents: CalendarAgentEvent[]
+  existingEvents: CalendarAgentEvent[],
+  disruptionSlot?: { start: number; end: number }
 ): TimeSlot[] {
   const slots: TimeSlot[] = [];
   const now = currentTime.getTime();
@@ -86,6 +88,14 @@ function findAvailableSlots(
     const available = filterByExistingEvents(filtered, existingEvents, isoDate);
 
     slots.push(...available);
+  }
+
+  // 排除 disruption 时段
+  if (disruptionSlot) {
+    return slots.filter(slot => {
+      // 如果时段与 disruption 重叠，则排除
+      return !(slot.start < disruptionSlot.end && slot.end > disruptionSlot.start);
+    });
   }
 
   return slots;

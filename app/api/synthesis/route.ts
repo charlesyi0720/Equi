@@ -160,6 +160,22 @@ const SCHEDULE_INSTRUCTIONS = `
 - Do NOT add this tag when you are only giving general advice without placing a specific block.
 `;
 
+const RESCHEDULE_INSTRUCTIONS = `
+
+[Disruption Detection & Reschedule Trigger]
+When user mentions unexpected events that disrupt their schedule (emergency meetings, delays, procrastination, overtime):
+- Acknowledge the disruption empathetically
+- Include this tag on its own line at the END of your response:
+  [RESCHEDULE_TRIGGER]: startHour | endHour | reason
+  Examples:
+  [RESCHEDULE_TRIGGER]: 14 | 16 | emergency meeting
+  [RESCHEDULE_TRIGGER]: 13 | 15 | procrastination recovery
+- startHour/endHour: integers 0-23 (24-hour format)
+- reason: brief description (no pipes or line breaks)
+- This triggers the "Reschedule Everything" button for the user
+- Do NOT add this tag for planned events — only for disruptions to existing schedule
+`;
+
 /** Extra system text when the user message clearly asks for a time block — overrides models skipping the tag. */
 const SCHEDULE_TAG_MANDATORY_APPENDIX = (todayIso: string) => `
 
@@ -294,6 +310,7 @@ function buildSystemPrompt(
     TONE_INSTRUCTIONS,
     BREVITY_INSTRUCTIONS,
     SCHEDULE_INSTRUCTIONS,
+    RESCHEDULE_INSTRUCTIONS,
     scheduleMandatoryBlock,
     ragContext,
     languageRule,

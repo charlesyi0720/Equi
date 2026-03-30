@@ -9,7 +9,7 @@ const supabase = createClient(
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, tasks } = await req.json();
+    const { userId, tasks, disruptionSlot } = await req.json();
 
     if (!userId || !tasks) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -35,7 +35,8 @@ export async function POST(req: NextRequest) {
       currentTime,
       userData.lifeStructure?.fixedActivities || [],
       userData.understanding?.biologicalClock || { focusPeaks: [], energyDips: [] },
-      userData.calendarAgentEvents || []
+      userData.calendarAgentEvents || [],
+      disruptionSlot
     );
 
     return NextResponse.json({ healed });
