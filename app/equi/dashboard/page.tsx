@@ -137,9 +137,9 @@ const SCHEDULE_UPDATE_LINE_RE =
 const SCHEDULE_UPDATE_LINE_RE_LEGACY =
   /(?:💡\s*)?\[SCHEDULE_UPDATE:\s*([^\|\n\r\uFF5C]+?)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*([^\[\]\s\n\r]+?)(?:\s*[\|｜]\s*(\d{4}-\d{2}-\d{2}))?/i;
 
-/** Matches reschedule trigger: [RESCHEDULE_TRIGGER]: startHour | endHour | reason */
+/** Matches reschedule trigger: [RESCHEDULE_TRIGGER]: startHour | endHour | taskTitle | suggestedDay | suggestedStart | suggestedEnd */
 const RESCHEDULE_TRIGGER_RE =
-  /\[RESCHEDULE_TRIGGER\]:\s*(\d+)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*([^\n\r]+)/i;
+  /\[RESCHEDULE_TRIGGER\]:\s*(\d+)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*([^\|｜\n\r]+?)\s*[\|｜]\s*([a-z]{3})\s*[\|｜]\s*(\d+)\s*[\|｜]\s*(\d+)/i;
 
 /** Strip machine-readable schedule lines from chat display (canonical + legacy bracket typo). */
 function stripScheduleUpdateLines(text: string): string {
@@ -150,14 +150,17 @@ function stripScheduleUpdateLines(text: string): string {
     .trim();
 }
 
-function parseRescheduleTrigger(text: string): { start: number; end: number; reason: string } | null {
+function parseRescheduleTrigger(text: string): { start: number; end: number; taskTitle: string; suggestedDay: string; suggestedStart: number; suggestedEnd: number } | null {
   const match = text.match(RESCHEDULE_TRIGGER_RE);
   if (!match) return null;
-  const [, startStr, endStr, reason] = match;
+  const [, startStr, endStr, taskTitle, suggestedDay, suggestedStartStr, suggestedEndStr] = match;
   const start = parseInt(startStr, 10);
   const end = parseInt(endStr, 10);
+  const suggestedStart = parseInt(suggestedStartStr, 10);
+  const suggestedEnd = parseInt(suggestedEndStr, 10);
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
-  return { start, end, reason: reason.trim() };
+  if (!Number.isFinite(suggestedStart) || !Number.isFinite(suggestedEnd) || suggestedEnd <= suggestedStart) return null;
+  return { start, end, taskTitle: taskTitle.trim(), suggestedDay: suggestedDay.toLowerCase(), suggestedStart, suggestedEnd };
 }
 
 function parseScheduleUpdateFromText(
@@ -2234,74 +2237,69 @@ function DashboardContent() {
                           {calendarApplyLoadingId === m.id ? "Naming…" : "Apply to Calendar"}
                         </button>
                       )}
-                      {m.role === "assistant" && parseRescheduleTrigger(m.content) && (
-                        <button
-                          type="button"
-                          disabled={isHealing || isStreaming}
-                          onClick={async () => {
-                            const trigger = parseRescheduleTrigger(m.content);
-                            if (!trigger || !userData || !supabase) return;
+                      {m.role === "assistant" && parseRescheduleTrigger(m.content) && (() => {
+                        const trigger = parseRescheduleTrigger(m.content);
+                        if (!trigger) return null;
 
-                            setIsHealing(true);
-                            try {
-                              const { data: { session } } = await supabase.auth.getSession();
-                              if (!session) return;
+                        const dayMap: Record<string, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
+                        const suggestedDayIdx = dayMap[trigger.suggestedDay];
 
-                              const affectedTasks = agentCalendarEvents.filter(e => {
-                                const overlap = e.start < trigger.end && e.end > trigger.start;
-                                return overlap;
-                              }).map(e => ({
-                                id: e.id,
-                                title: e.title,
-                                duration: e.end - e.start,
-                                priority: 3,
-                                cognitiveLoad: "medium" as const
-                              }));
-
-                              const response = await fetch("/api/auto-heal", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  userId: session.user.id,
-                                  tasks: affectedTasks,
-                                  disruptionSlot: { start: trigger.start, end: trigger.end }
-                                })
-                              });
-
-                              if (response.ok) {
-                                const { healed } = await response.json();
-                                const newEvents = healed.map((h: any) => ({
-                                  id: generateId(),
-                                  title: h.task.title,
-                                  dayIdx: h.slot.dayIdx,
-                                  start: h.slot.start,
-                                  end: h.slot.end,
-                                  isoDate: h.slot.isoDate
-                                }));
-
-                                setAgentCalendarEvents(prev => [
-                                  ...prev.filter(e => !affectedTasks.find(t => t.id === e.id)),
-                                  ...newEvents
-                                ]);
-
-                                const toast = document.createElement("div");
-                                toast.innerHTML = `<div class="flex items-center gap-2"><span>🛟</span><span>Schedule Rescheduled</span></div>`;
-                                toast.className = "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl bg-blue-600 text-white px-5 py-2.5 text-sm font-semibold shadow-lg";
-                                document.body.appendChild(toast);
-                                setTimeout(() => toast.remove(), 2500);
-                              }
-                            } catch (error) {
-                              console.error("Reschedule error:", error);
-                            } finally {
-                              setIsHealing(false);
-                            }
-                          }}
-                          className="mt-3 w-full rounded-xl bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200 px-4 py-2.5 text-xs font-semibold text-blue-700 hover:from-blue-100 hover:to-cyan-100 hover:border-blue-300 transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <LifebuoyIcon />
-                          {isHealing ? "Rescheduling..." : "🛟 Reschedule Everything"}
-                        </button>
-                      )}
+                        return (
+                          <div className="mt-3 flex gap-2">
+                            <button
+                              type="button"
+                              disabled={isHealing || isStreaming}
+                              onClick={async () => {
+                                const affectedTask = agentCalendarEvents.find(e =>
+                                  e.title.toLowerCase().includes(trigger.taskTitle.toLowerCase()) ||
+                                  trigger.taskTitle.toLowerCase().includes(e.title.toLowerCase())
+                                );
+                                if (affectedTask) {
+                                  setAgentCalendarEvents(prev => prev.filter(e => e.id !== affectedTask.id));
+                                  const toast = document.createElement("div");
+                                  toast.textContent = "Task Cancelled";
+                                  toast.className = "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl bg-rose-600 text-white px-5 py-2.5 text-sm font-semibold shadow-lg";
+                                  document.body.appendChild(toast);
+                                  setTimeout(() => toast.remove(), 2500);
+                                }
+                              }}
+                              className="flex-1 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-semibold text-rose-600 hover:bg-rose-100 hover:border-rose-300 transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              Cancel Task
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isHealing || isStreaming}
+                              onClick={async () => {
+                                const affectedTask = agentCalendarEvents.find(e =>
+                                  e.title.toLowerCase().includes(trigger.taskTitle.toLowerCase()) ||
+                                  trigger.taskTitle.toLowerCase().includes(e.title.toLowerCase())
+                                );
+                                if (affectedTask) {
+                                  setAgentCalendarEvents(prev => [
+                                    ...prev.filter(e => e.id !== affectedTask.id),
+                                    {
+                                      ...affectedTask,
+                                      dayIdx: suggestedDayIdx,
+                                      start: trigger.suggestedStart,
+                                      end: trigger.suggestedEnd
+                                    }
+                                  ]);
+                                  const toast = document.createElement("div");
+                                  toast.innerHTML = `<div class="flex items-center gap-2"><span>🛟</span><span>Rescheduled to ${DAYS[suggestedDayIdx]} ${trigger.suggestedStart}:00-${trigger.suggestedEnd}:00</span></div>`;
+                                  toast.className = "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl bg-blue-600 text-white px-5 py-2.5 text-sm font-semibold shadow-lg";
+                                  document.body.appendChild(toast);
+                                  setTimeout(() => toast.remove(), 2500);
+                                }
+                              }}
+                              className="flex-1 rounded-xl bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200 px-4 py-2.5 text-xs font-semibold text-blue-700 hover:from-blue-100 hover:to-cyan-100 hover:border-blue-300 transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <LifebuoyIcon />
+                              Reschedule to {DAYS[suggestedDayIdx]} {trigger.suggestedStart}:00
+                            </button>
+                          </div>
+                        );
+                      })()}
                     </div>
                     );
                   })}

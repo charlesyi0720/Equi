@@ -167,14 +167,18 @@ const RESCHEDULE_INSTRUCTIONS = `
 [Disruption Detection & Reschedule Trigger]
 When user mentions unexpected events that disrupt their schedule (emergency meetings, delays, procrastination, overtime):
 - Acknowledge the disruption empathetically
+- Identify which existing task is affected
+- Suggest an alternative time slot (preferably during their focus peak)
 - Include this tag on its own line at the END of your response:
-  [RESCHEDULE_TRIGGER]: startHour | endHour | reason
+  [RESCHEDULE_TRIGGER]: startHour | endHour | taskTitle | suggestedDay | suggestedStart | suggestedEnd
   Examples:
-  [RESCHEDULE_TRIGGER]: 14 | 16 | emergency meeting
-  [RESCHEDULE_TRIGGER]: 13 | 15 | procrastination recovery
-- startHour/endHour: integers 0-23 (24-hour format)
-- reason: brief description (no pipes or line breaks)
-- This triggers the "Reschedule Everything" button for the user
+  [RESCHEDULE_TRIGGER]: 14 | 16 | Deep Work Session | wed | 9 | 11
+  [RESCHEDULE_TRIGGER]: 13 | 15 | Gym | thu | 18 | 19
+- startHour/endHour: disruption time (24-hour format)
+- taskTitle: the affected task name
+- suggestedDay: mon/tue/wed/thu/fri/sat/sun
+- suggestedStart/suggestedEnd: suggested alternative time (24-hour format)
+- This triggers two buttons: "Cancel Task" and "Reschedule to [suggested time]"
 - Do NOT add this tag for planned events — only for disruptions to existing schedule
 `;
 
