@@ -1092,7 +1092,7 @@ function DashboardContent() {
   };
 
   // ---------------------------------------------------------------------------
-  // Auto-Healing: 液态日程重组
+  // Auto-Healing: Liquid Schedule Reorganization
   // ---------------------------------------------------------------------------
   const handleAutoHeal = async () => {
     if (!userData || isHealing || !supabase) return;
@@ -1568,6 +1568,12 @@ function DashboardContent() {
       preferredAgentPersona: userData?.understanding?.preferredAgentPersona,
       fixedActivitiesSummary,
       flexibleActivitiesSummary,
+      existingEvents: agentCalendarEvents.map(e => ({
+        title: e.title,
+        day: DAYS[e.dayIdx],
+        start: e.start,
+        end: e.end
+      }))
     };
 
     try {
@@ -1910,6 +1916,12 @@ function DashboardContent() {
       preferredAgentPersona: userData?.understanding?.preferredAgentPersona,
       fixedActivitiesSummary,
       flexibleActivitiesSummary,
+      existingEvents: agentCalendarEvents.map(e => ({
+        title: e.title,
+        day: DAYS[e.dayIdx],
+        start: e.start,
+        end: e.end
+      }))
     };
 
     try {
@@ -2273,7 +2285,7 @@ function DashboardContent() {
                                 ]);
 
                                 const toast = document.createElement("div");
-                                toast.innerHTML = `<div class="flex items-center gap-2"><span>🛟</span><span>日程已重组</span></div>`;
+                                toast.innerHTML = `<div class="flex items-center gap-2"><span>🛟</span><span>Schedule Rescheduled</span></div>`;
                                 toast.className = "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl bg-blue-600 text-white px-5 py-2.5 text-sm font-semibold shadow-lg";
                                 document.body.appendChild(toast);
                                 setTimeout(() => toast.remove(), 2500);
@@ -2287,7 +2299,7 @@ function DashboardContent() {
                           className="mt-3 w-full rounded-xl bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200 px-4 py-2.5 text-xs font-semibold text-blue-700 hover:from-blue-100 hover:to-cyan-100 hover:border-blue-300 transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <LifebuoyIcon />
-                          {isHealing ? "重组中..." : "🛟 重组剩余日程"}
+                          {isHealing ? "Rescheduling..." : "🛟 Reschedule Everything"}
                         </button>
                       )}
                     </div>
@@ -2365,7 +2377,7 @@ function DashboardContent() {
                     className="flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 text-xs font-semibold transition-colors cursor-pointer"
                   >
                     <LifebuoyIcon />
-                    {isHealing ? "重组中..." : "液态日程"}
+                    {isHealing ? "Rescheduling..." : "Liquid Schedule"}
                   </button>
                   <div className="flex items-center gap-5 text-xs text-slate-500 font-medium">
                     <div className="flex items-center gap-2">

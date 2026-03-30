@@ -61,6 +61,8 @@ interface SynthesisMessage {
     fixedActivitiesSummary?: string;
     /** Human-readable summary of the user's flexible/floating activities (gym daily quota, etc.). */
     flexibleActivitiesSummary?: string;
+    /** Existing calendar events to avoid conflicts. */
+    existingEvents?: Array<{ title: string; day: string; start: number; end: number }>;
   };
 }
 
@@ -152,7 +154,7 @@ const SCHEDULE_INSTRUCTIONS = `
   Examples:
   💡 [SCHEDULE_UPDATE]: Deep Work Block | 14 | 16 | wed
   💡 [SCHEDULE_UPDATE]: Macroeconomics homework | 14 | 15 | wed | 2026-03-25
-- Title: plain text, MUST NOT contain | or line breaks. Use the real activity the user asked for (e.g. Gym, Run, Thesis, Macroeconomics) — never generic placeholders like "Focus block", "Deep work", or "Calendar event" unless the user used those exact words.
+- Title: Use the EXACT activity name from user's message (e.g., if user says "gym session", use "Gym Session", not "Workout" or "Exercise Block"). Plain text, MUST NOT contain | or line breaks. Avoid generic placeholders like "Focus block", "Deep work", or "Calendar event" unless the user used those exact words.
 - startHour/endHour: integers 0-23 (24-hour), endHour > startHour.
 - day: mon/tue/wed/thu/fri/sat/sun (English, lowercase).
 - If the block is for "today", always include the 5th field YYYY-MM-DD using today's date given in the prompt (so it does not repeat every week).
@@ -289,15 +291,29 @@ function buildSystemPrompt(
     ? `[Flexible/Floating Activities — these have no fixed slot; schedule them when convenient or during focus peaks]\n${flexibleActivitiesSummary}`
     : "";
 
+  const existingEvents = userData?.existingEvents || [];
+  const existingEventsText = existingEvents.length > 0
+    ? existingEvents.map(e => `- ${e.title}: ${e.day} ${e.start}:00-${e.end}:00`).join("\n")
+    : "No events scheduled yet.";
+
+  const conflictDetectionLine = `[Existing Calendar Events — DO NOT schedule over these]\n${existingEventsText}\n\nWhen suggesting new time blocks, check if the time overlaps with existing events. If overlap detected, suggest an alternative time.`;
+
   const languageRule =
     "CRITICAL RULE: You MUST respond entirely in the language the user is currently typing in (e.g., reply in English if the user types in English. DO NOT force Chinese).";
 
   const todayIso = todayIsoInTimeZone(tz);
+  const todayDayOfWeek = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "long" }).format(new Date());
+
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowDayOfWeek = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "long" }).format(tomorrow);
+  const tomorrowIso = todayIsoInTimeZone(tz).replace(/\d{2}$/, String(tomorrow.getDate()).padStart(2, '0'));
+
   const scheduleMandatoryBlock = scheduleTagMandatory ? SCHEDULE_TAG_MANDATORY_APPENDIX(todayIso) : "";
 
   return [
     `The user's current local time is: ${localTimeStr ?? serverTimeStr}. Adjust your greetings and scheduling suggestions strictly to match this time of day. Never say "Good morning" when it is clearly evening or night.`,
-    `Today's date in the user's timezone (${tz}) for calendar tags is: ${todayIso}.`,
+    `Today is ${todayDayOfWeek}, ${todayIso}. When user says "tomorrow", it means ${tomorrowDayOfWeek}, ${tomorrowIso}.`,
     nameLine,
     personaInstruction,
     personaIntro,
@@ -307,6 +323,7 @@ function buildSystemPrompt(
     scheduleLine,
     fixedActivitiesLine,
     flexibleActivitiesLine,
+    conflictDetectionLine,
     TONE_INSTRUCTIONS,
     BREVITY_INSTRUCTIONS,
     SCHEDULE_INSTRUCTIONS,
