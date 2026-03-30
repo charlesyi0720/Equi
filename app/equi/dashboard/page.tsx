@@ -50,6 +50,18 @@ const LogoutIcon = () => (
   </svg>
 );
 
+const LifebuoyIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="10" />
+    <circle cx="12" cy="12" r="4" />
+    <line x1="4.93" y1="4.93" x2="9.17" y2="9.17" />
+    <line x1="14.83" y1="14.83" x2="19.07" y2="19.07" />
+    <line x1="14.83" y1="9.17" x2="19.07" y2="4.93" />
+    <line x1="14.83" y1="9.17" x2="19.07" y2="4.93" />
+    <line x1="4.93" y1="19.07" x2="9.17" y2="14.83" />
+  </svg>
+);
+
 // Error Boundary Component
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -1038,6 +1050,8 @@ function DashboardContent() {
   const [calendarDetail, setCalendarDetail] = useState<CalendarGridEvent | null>(null);
   /** While non-null, a calendar apply is in progress (Gemini title + persist). */
   const [calendarApplyLoadingId, setCalendarApplyLoadingId] = useState<string | null>(null);
+  /** Auto-healing state */
+  const [isHealing, setIsHealing] = useState(false);
 
   // ---------------------------------------------------------------------------
   // Delete an agent event by id from all state + Supabase.
@@ -1060,6 +1074,63 @@ function DashboardContent() {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ user_data: updated }),
     });
+  };
+
+  // ---------------------------------------------------------------------------
+  // Auto-Healing: 液态日程重组
+  // ---------------------------------------------------------------------------
+  const handleAutoHeal = async () => {
+    if (!userData || isHealing) return;
+
+    setIsHealing(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      // 提取未完成的任务
+      const tasks = agentCalendarEvents
+        .filter(e => !e.isoDate || new Date(e.isoDate) >= new Date())
+        .map(e => ({
+          id: e.id,
+          title: e.title,
+          duration: e.end - e.start,
+          priority: 3,
+          cognitiveLoad: "medium" as const
+        }));
+
+      const response = await fetch("/api/auto-heal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: session.user.id, tasks })
+      });
+
+      if (response.ok) {
+        const { healed } = await response.json();
+
+        // 更新日历事件
+        const newEvents = healed.map((h: any) => ({
+          id: generateId(),
+          title: h.task.title,
+          dayIdx: h.slot.dayIdx,
+          start: h.slot.start,
+          end: h.slot.end,
+          isoDate: h.slot.isoDate
+        }));
+
+        setAgentCalendarEvents(newEvents);
+
+        // 显示成功提示
+        const toast = document.createElement("div");
+        toast.innerHTML = `<div class="flex items-center gap-2"><span>🛟</span><span>日程已重组</span></div>`;
+        toast.className = "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl bg-blue-600 text-white px-5 py-2.5 text-sm font-semibold shadow-lg";
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 2500);
+      }
+    } catch (error) {
+      console.error("Auto-heal error:", error);
+    } finally {
+      setIsHealing(false);
+    }
   };
 
   const [showResumeDialog, setShowResumeDialog] = useState(false);
@@ -2204,24 +2275,34 @@ function DashboardContent() {
                   <div className="text-sm font-semibold text-slate-900 tracking-tight">This Week</div>
                   <div className="mt-1 text-xs text-slate-400 font-medium">{weekRangeLabel} &middot; 12 AM&ndash;11 PM</div>
                 </div>
-                <div className="flex items-center gap-5 text-xs text-slate-500 font-medium">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-block h-3 w-3 rounded border border-emerald-200 bg-emerald-50/70" />
-                    <span>Focus peak</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="inline-block h-3 w-3 rounded border border-amber-200"
-                      style={{
-                        backgroundImage:
-                          "repeating-linear-gradient(135deg, rgba(251,191,36,0.25) 0px, rgba(251,191,36,0.25) 3px, rgba(255,255,255,0.5) 3px, rgba(255,255,255,0.5) 9px)",
-                      }}
-                    />
-                    <span>Energy dip</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="inline-block h-3 w-3 rounded border border-rose-300 border-dashed" />
-                    <span>Now</span>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleAutoHeal}
+                    disabled={isHealing}
+                    className="flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    <LifebuoyIcon />
+                    {isHealing ? "重组中..." : "液态日程"}
+                  </button>
+                  <div className="flex items-center gap-5 text-xs text-slate-500 font-medium">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block h-3 w-3 rounded border border-emerald-200 bg-emerald-50/70" />
+                      <span>Focus peak</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="inline-block h-3 w-3 rounded border border-amber-200"
+                        style={{
+                          backgroundImage:
+                            "repeating-linear-gradient(135deg, rgba(251,191,36,0.25) 0px, rgba(251,191,36,0.25) 3px, rgba(255,255,255,0.5) 3px, rgba(255,255,255,0.5) 9px)",
+                        }}
+                      />
+                      <span>Energy dip</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block h-3 w-3 rounded border border-rose-300 border-dashed" />
+                      <span>Now</span>
+                    </div>
                   </div>
                 </div>
               </div>
