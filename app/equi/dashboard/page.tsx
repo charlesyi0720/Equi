@@ -1447,17 +1447,24 @@ function DashboardContent() {
   // Persist a new agent event to Supabase via server route (bypasses RLS).
   // ---------------------------------------------------------------------------
   const persistAgentEvent = async (newEvent: { id: string; title: string; dayIdx: number; start: number; end: number; isoDate?: string }) => {
+    console.log('[DEBUG] persistAgentEvent called with:', newEvent);
     const overlapsSlot = (a: { dayIdx: number; start: number; end: number; isoDate?: string }) => {
       if (a.dayIdx !== newEvent.dayIdx) return false;
       // isoDate: if both set they must match; if either unset (recurring) treat as same day
       if (a.isoDate && newEvent.isoDate && a.isoDate !== newEvent.isoDate) return false;
       const lo = Math.max(a.start, newEvent.start);
       const hi = Math.min(a.end, newEvent.end);
-      return lo < hi - 1e-6;
+      const overlaps = lo < hi - 1e-6;
+      if (overlaps) console.log('[DEBUG] Overlap detected between', a.title, 'and', newEvent.title);
+      return overlaps;
     };
 
     // 1. Replace any overlapping agent blocks on the same day/date (avoid stale "Focus block" under new "Gym").
-    setAgentCalendarEvents((prev) => [...prev.filter((e) => !overlapsSlot(e)), newEvent]);
+    setAgentCalendarEvents((prev) => {
+      const filtered = prev.filter((e) => !overlapsSlot(e));
+      console.log('[DEBUG] After filtering, remaining events:', filtered.length, 'Adding:', newEvent.title);
+      return [...filtered, newEvent];
+    });
 
     if (!userData) return;
 
