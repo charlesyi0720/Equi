@@ -186,13 +186,13 @@ function parseAllScheduleUpdatesFromText(
   const dayMap: Record<string, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
   const results: Array<{ title: string; dayIdx: number; start: number; end: number; isoDate?: string }> = [];
 
-  const reGlobal = /(?:💡\s*)?\[SCHEDULE_UPDATE\]?:\s*([^\|\n\r\uFF5C]+?)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*([^\[\]\s\n\r]+?)(?:\s*[\|｜]\s*(\d{4}-\d{2}-\d{2}))?(?=\s*$|\s*\n|\s*💡|\s*\[)/gim;
+  const reGlobal = /(?:💡\s*)?\[SCHEDULE_UPDATE\]?:\s*([^\|\n\r\uFF5C]+?)\s*[\|｜]\s*([\d.]+)\s*[\|｜]\s*([\d.]+)\s*[\|｜]\s*([^\[\]\s\n\r]+?)(?:\s*[\|｜]\s*(\d{4}-\d{2}-\d{2}))?(?=\s*$|\s*\n|\s*💡|\s*\[)/gim;
 
   let match;
   while ((match = reGlobal.exec(text)) !== null) {
     const [, titleRaw, startStr, endStr, dayRaw, isoDate] = match;
-    const start = parseInt(startStr, 10);
-    const end = parseInt(endStr, 10);
+    const start = parseFloat(startStr);
+    const end = parseFloat(endStr);
     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
     const key = dayRaw.trim().toLowerCase().substring(0, 3);
     const dayIdx = dayMap[key];
