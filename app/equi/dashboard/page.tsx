@@ -1455,7 +1455,7 @@ function DashboardContent() {
       const lo = Math.max(a.start, newEvent.start);
       const hi = Math.min(a.end, newEvent.end);
       const overlaps = lo < hi - 1e-6;
-      if (overlaps) console.log('[DEBUG] Overlap detected between', a.title, 'and', newEvent.title);
+      if (overlaps) console.log('[DEBUG] Overlap detected between new event', newEvent.title);
       return overlaps;
     };
 
