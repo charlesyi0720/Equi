@@ -842,6 +842,8 @@ function resolveAllSchedulesFromReply(
 
   // Try parsing ALL [SCHEDULE_UPDATE] tags first (multi-task replies)
   const allTags = parseAllScheduleUpdatesFromText(assistantMessage);
+  console.log('[DEBUG] parseAllScheduleUpdatesFromText found:', allTags.length, 'tags');
+  console.log('[DEBUG] Assistant message:', assistantMessage);
   if (allTags.length > 0) {
     return allTags.map((parsedTag) => {
       const { start, end } = mergeTagWithProseTimes(parsedTag, combined);
