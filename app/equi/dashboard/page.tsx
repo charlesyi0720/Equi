@@ -188,7 +188,8 @@ function parseAllScheduleUpdatesFromText(
 
   const reGlobal = /(?:💡\s*)?\[SCHEDULE_UPDATE\]?:\s*([^\|\n\r\uFF5C]+?)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*([^\[\]\s\n\r]+?)(?:\s*[\|｜]\s*(\d{4}-\d{2}-\d{2}))?(?=\s*$|\s*\n|\s*💡|\s*\[)/gim;
 
-  for (const match of text.matchAll(reGlobal)) {
+  let match;
+  while ((match = reGlobal.exec(text)) !== null) {
     const [, titleRaw, startStr, endStr, dayRaw, isoDate] = match;
     const start = parseInt(startStr, 10);
     const end = parseInt(endStr, 10);
