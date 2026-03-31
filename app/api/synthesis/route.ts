@@ -149,11 +149,17 @@ const SCHEDULE_INSTRUCTIONS = `
 
 [Schedule Suggestion Output Format]
 - Whenever you confirm adding, moving, or reserving a concrete calendar block (or tell the user you updated their schedule), you MUST include the machine-readable tag ON ITS OWN LINE at the END of your response — even if the rest of your reply is in Chinese or another language.
+- CRITICAL: If you are adding MULTIPLE tasks, you MUST output ONE tag per task, each on its own line.
 - Tag format (ASCII pipes only):
   ${SCHEDULE_UPDATE_MARKER} Event Title | startHour | endHour | day [| YYYY-MM-DD]
-  Examples:
+  Examples (single task):
   💡 [SCHEDULE_UPDATE]: Deep Work Block | 14 | 16 | wed
   💡 [SCHEDULE_UPDATE]: Macroeconomics homework | 14 | 15 | wed | 2026-03-25
+
+  Examples (multiple tasks):
+  💡 [SCHEDULE_UPDATE]: Macro Lecture Review | 14 | 15 | wed
+  💡 [SCHEDULE_UPDATE]: Online Assessment | 14 | 16 | wed
+  💡 [SCHEDULE_UPDATE]: Scholarship Application | 16 | 17 | wed
 - Title: Use the EXACT activity name from user's message (e.g., if user says "gym session", use "Gym Session", not "Workout" or "Exercise Block"). Plain text, MUST NOT contain | or line breaks. Avoid generic placeholders like "Focus block", "Deep work", or "Calendar event" unless the user used those exact words.
 - startHour/endHour: integers 0-23 (24-hour), endHour > startHour.
 - day: mon/tue/wed/thu/fri/sat/sun (English, lowercase).
