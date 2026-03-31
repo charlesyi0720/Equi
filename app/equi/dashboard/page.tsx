@@ -179,6 +179,29 @@ function parseScheduleUpdateFromText(
   return { title: titleRaw.trim(), dayIdx, start, end, isoDate: isoDate ?? undefined };
 }
 
+/** Parse ALL [SCHEDULE_UPDATE] tags from a message (handles multiple tasks in one reply). */
+function parseAllScheduleUpdatesFromText(
+  text: string
+): Array<{ title: string; dayIdx: number; start: number; end: number; isoDate?: string }> {
+  const dayMap: Record<string, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
+  const results: Array<{ title: string; dayIdx: number; start: number; end: number; isoDate?: string }> = [];
+
+  const reGlobal = /(?:💡\s*)?\[SCHEDULE_UPDATE\]?:\s*([^\|\n\r\uFF5C]+?)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*(\d+)\s*[\|｜]\s*([^\[\]\s\n\r]+?)(?:\s*[\|｜]\s*(\d{4}-\d{2}-\d{2}))?(?=\s*$|\s*\n|\s*💡|\s*\[)/gim;
+
+  for (const match of text.matchAll(reGlobal)) {
+    const [, titleRaw, startStr, endStr, dayRaw, isoDate] = match;
+    const start = parseInt(startStr, 10);
+    const end = parseInt(endStr, 10);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+    const key = dayRaw.trim().toLowerCase().substring(0, 3);
+    const dayIdx = dayMap[key];
+    if (dayIdx === undefined) continue;
+    results.push({ title: titleRaw.trim(), dayIdx, start, end, isoDate: isoDate ?? undefined });
+  }
+
+  return results;
+}
+
 function mondayBasedDayIndex(d: Date): number {
   const dow = d.getDay();
   return dow === 0 ? 6 : dow - 1;
@@ -815,16 +838,21 @@ function resolveAllSchedulesFromReply(
   activityLabels: string[] = []
 ): ParsedSchedule[] {
   const combined = normalizeDigitsForParse(`${userMessage}\n${assistantMessage}\n${broaderHistory ?? ""}`);
-  const parsedTag = parseScheduleUpdateFromText(assistantMessage);
-  if (parsedTag) {
-    const { start, end } = mergeTagWithProseTimes(parsedTag, combined);
-    const generic = /^(focus\s*block|deep\s*work(\s*block)?|calendar\s*(block|event)?|scheduled\s*block)$/i.test(
-      parsedTag.title.trim()
-    );
-    const title = generic
-      ? extractBestScheduleTitle(userMessage, assistantMessage, broaderHistory, activityLabels)
-      : canonicalizeActivityLabel(parsedTag.title.trim(), activityLabels);
-    return [{ ...parsedTag, start, end, title }];
+
+  // Try parsing ALL [SCHEDULE_UPDATE] tags first (multi-task replies)
+  const allTags = parseAllScheduleUpdatesFromText(assistantMessage);
+  if (allTags.length > 0) {
+    return allTags.map((parsedTag) => {
+      const { start, end } = mergeTagWithProseTimes(parsedTag, combined);
+      const generic = /^(focus\s*block|deep\s*work(\s*block)?|calendar\s*(block|event)?|scheduled\s*block)$/i.test(
+        parsedTag.title.trim()
+      );
+      const title = generic
+        ? extractBestScheduleTitle(userMessage, assistantMessage, broaderHistory, activityLabels)
+        : canonicalizeActivityLabel(parsedTag.title.trim(), activityLabels);
+      return { ...parsedTag, start, end, title };
+    });
+  }
   }
 
   if (!containsAnyTime(combined) || !hasSchedulingIntent(userMessage, assistantMessage)) return [];
@@ -1419,7 +1447,8 @@ function DashboardContent() {
   const persistAgentEvent = async (newEvent: { id: string; title: string; dayIdx: number; start: number; end: number; isoDate?: string }) => {
     const overlapsSlot = (a: { dayIdx: number; start: number; end: number; isoDate?: string }) => {
       if (a.dayIdx !== newEvent.dayIdx) return false;
-      if ((a.isoDate || "") !== (newEvent.isoDate || "")) return false;
+      // isoDate: if both set they must match; if either unset (recurring) treat as same day
+      if (a.isoDate && newEvent.isoDate && a.isoDate !== newEvent.isoDate) return false;
       const lo = Math.max(a.start, newEvent.start);
       const hi = Math.min(a.end, newEvent.end);
       return lo < hi - 1e-6;
@@ -2137,14 +2166,14 @@ function DashboardContent() {
                       m.role === "assistant" && prev?.role === "user" ? prev.content : "";
                     const scheduleForUi =
                       m.role === "assistant"
-                        ? resolveScheduleFromReply(
+                        ? resolveAllSchedulesFromReply(
                             pairedUserContent,
                             m.content,
                             new Date(),
                             broaderHistory,
                             scheduleActivityLabelHints
-                          )
-                        : null;
+                          ).length > 0
+                        : false;
                     return (
                     <div
                       key={m.id}
@@ -2155,7 +2184,7 @@ function DashboardContent() {
                       }
                     >
                       {stripScheduleUpdateLines(m.content)}
-                      {scheduleForUi && (
+                      {scheduleForUi && !isStreaming && (
                         <button
                           type="button"
                           disabled={calendarApplyLoadingId !== null || isStreaming}
@@ -2237,7 +2266,7 @@ function DashboardContent() {
                           {calendarApplyLoadingId === m.id ? "Naming…" : "Apply to Calendar"}
                         </button>
                       )}
-                      {m.role === "assistant" && parseRescheduleTrigger(m.content) && (() => {
+                      {m.role === "assistant" && !isStreaming && parseRescheduleTrigger(m.content) && (() => {
                         const trigger = parseRescheduleTrigger(m.content);
                         if (!trigger) return null;
 

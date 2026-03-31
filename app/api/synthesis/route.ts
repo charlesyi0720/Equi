@@ -297,10 +297,10 @@ function buildSystemPrompt(
 
   const existingEvents = userData?.existingEvents || [];
   const existingEventsText = existingEvents.length > 0
-    ? existingEvents.map(e => `- ${e.title}: ${e.day} ${e.start}:00-${e.end}:00`).join("\n")
-    : "No events scheduled yet.";
+    ? existingEvents.map(e => `- ${e.title}: ${e.day} ${e.start}:00–${e.end}:00`).join("\n")
+    : "None yet.";
 
-  const conflictDetectionLine = `[Existing Calendar Events — DO NOT schedule over these]\n${existingEventsText}\n\nWhen suggesting new time blocks, check if the time overlaps with existing events. If overlap detected, suggest an alternative time.`;
+  const conflictDetectionLine = `[Existing Calendar Events — NEVER place a new block over these times]\n${existingEventsText}\n\nBefore suggesting any time block, verify it does not overlap with the above. If a conflict exists, propose a non-conflicting slot instead.`;
 
   const languageRule =
     "CRITICAL RULE: You MUST respond entirely in the language the user is currently typing in (e.g., reply in English if the user types in English. DO NOT force Chinese).";
@@ -311,7 +311,7 @@ function buildSystemPrompt(
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowDayOfWeek = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "long" }).format(tomorrow);
-  const tomorrowIso = todayIsoInTimeZone(tz).replace(/\d{2}$/, String(tomorrow.getDate()).padStart(2, '0'));
+  const tomorrowIso = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(tomorrow);
 
   const scheduleMandatoryBlock = scheduleTagMandatory ? SCHEDULE_TAG_MANDATORY_APPENDIX(todayIso) : "";
 

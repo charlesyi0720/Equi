@@ -88,17 +88,19 @@ Return ONLY valid JSON (no markdown fences): {"titles":["..."]}
 The "titles" array MUST have exactly ${slots.length} strings, in the same order as the numbered slots.
 
 Rules for each title:
-- Short: about 2–8 words, maximum 40 characters.
-- Name the real task or subject only (e.g. "Macro review", "微观经济学复习", "Gym", "Thesis").
-- Use the same language as the user's task in the messages (Chinese or English) when natural.
+- Short: about 2–5 words, maximum 35 characters.
+- Use the EXACT activity name from the user's message. If the user said "macro review", the title is "Macro Review". If they said "gym", the title is "Gym".
+- Prefer known activity labels (listed below) when they match.
+- Use the same language as the user's task (Chinese or English).
 
-FORBIDDEN — never use as a title:
-- Coaching or energy commentary (e.g. 精力充沛, 黄金时段, 最佳状态, peak energy, motivational fragments copied from the assistant).
-- Vague labels like "时间安排" or "Scheduled block" unless the user explicitly asked for that.
+FORBIDDEN:
+- Generic filler like "Deep Work", "Focus Block", "Scheduled Block", "Time Block", "Calendar Event" — unless the user used those exact words.
+- Coaching/energy commentary (精力充沛, 黄金时段, peak energy, etc.).
+- Titles longer than 35 characters.
 
-Known user activity labels (prefer exact spelling when they fit): ${labels.length ? labels.join(", ") : "(none)"}
+Known user activity labels (use exact spelling when they match): ${labels.length ? labels.join(", ") : "(none)"}
 
-Slots:
+Slots to name:
 ${slotsBlock}
 
 --- User message ---
