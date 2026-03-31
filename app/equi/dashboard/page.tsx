@@ -1691,8 +1691,10 @@ function DashboardContent() {
           broaderHistory,
           activityLabelHints
         );
+        console.log('[DEBUG] schedules to persist:', schedules.length, schedules);
         for (let i = 0; i < schedules.length; i++) {
           const s = schedules[i];
+          console.log('[DEBUG] Persisting schedule', i, ':', s);
           await persistAgentEvent({
             id: `auto-${assistantMessage.id}-${Date.now()}-${i}`,
             title: s.title,
@@ -2043,8 +2045,10 @@ function DashboardContent() {
           broaderHistory,
           activityLabelHints
         );
+        console.log('[DEBUG] schedules to persist:', schedules.length, schedules);
         for (let i = 0; i < schedules.length; i++) {
           const s = schedules[i];
+          console.log('[DEBUG] Persisting schedule', i, ':', s);
           await persistAgentEvent({
             id: `auto-${assistantMessage.id}-${Date.now()}-${i}`,
             title: s.title,
