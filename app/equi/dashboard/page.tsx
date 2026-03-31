@@ -853,7 +853,6 @@ function resolveAllSchedulesFromReply(
       return { ...parsedTag, start, end, title };
     });
   }
-  }
 
   if (!containsAnyTime(combined) || !hasSchedulingIntent(userMessage, assistantMessage)) return [];
 
