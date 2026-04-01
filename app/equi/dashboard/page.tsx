@@ -1092,6 +1092,7 @@ function DashboardContent() {
     isoDate?: string;
   }>>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const isMountedRef = useRef(true);
   const calendarScrollRef = useRef<HTMLDivElement>(null);
   const messagesSnapshotRef = useRef<Message[]>([]);
@@ -1330,11 +1331,6 @@ function DashboardContent() {
           const msgs = await loadSessionMessages(activeId, prevSession?.messages);
           if (msgs.length > 0) {
             setMessages(msgs);
-            // Scroll to bottom after messages load
-            setTimeout(() => {
-              const el = document.querySelector('[data-messages-end]');
-              el?.scrollIntoView({ behavior: "auto" });
-            }, 300);
           }
         }
         setIsLoading(false);
@@ -1384,22 +1380,21 @@ function DashboardContent() {
 
   // Scroll to bottom when messages change or load
   useEffect(() => {
-    if (messagesEndRef.current && messages.length > 0) {
-      // Use setTimeout to ensure DOM is updated
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, 100);
+    if (messagesContainerRef.current && messages.length > 0) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
     }
   }, [messages]);
 
   // Initial scroll to bottom after loading completes
   useEffect(() => {
-    if (!isLoading && messages.length > 0 && messagesEndRef.current) {
+    if (!isLoading && messages.length > 0 && messagesContainerRef.current) {
       setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
-      }, 200);
+        if (messagesContainerRef.current) {
+          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+        }
+      }, 100);
     }
-  }, [isLoading, messages.length]);
+  }, [isLoading]);
 
   // Keep snapshot ref in sync so async persistSession reads fresh messages.
   useEffect(() => {
@@ -2228,7 +2223,7 @@ function DashboardContent() {
             </div>
 
             <div className="px-6 py-5">
-              <div className="overflow-y-auto rounded-2xl border border-gray-100 bg-gray-50/60 p-4 text-sm text-slate-700 shadow-[inset_0_1px_3px_rgba(0,0,0,0.04)]" style={{ height: "calc(100vh - 360px)" }}>
+              <div ref={messagesContainerRef} className="overflow-y-auto rounded-2xl border border-gray-100 bg-gray-50/60 p-4 text-sm text-slate-700 shadow-[inset_0_1px_3px_rgba(0,0,0,0.04)]" style={{ height: "calc(100vh - 360px)" }}>
                 <div className="space-y-3.5">
                   {messages.map((m, i) => {
                     const prev = i > 0 ? messages[i - 1] : null;
@@ -2424,7 +2419,7 @@ function DashboardContent() {
                     </div>
                     );
                   })}
-                  <div ref={messagesEndRef} data-messages-end />
+                  <div ref={messagesEndRef} />
                 </div>
               </div>
 
