@@ -1381,6 +1381,7 @@ function DashboardContent() {
   // Scroll to bottom when messages change or load
   useEffect(() => {
     if (messagesContainerRef.current && messages.length > 0) {
+      console.log('[DEBUG] Scrolling chat to bottom, messages:', messages.length);
       messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
     }
   }, [messages]);
@@ -1388,8 +1389,10 @@ function DashboardContent() {
   // Initial scroll to bottom after loading completes
   useEffect(() => {
     if (!isLoading && messages.length > 0 && messagesContainerRef.current) {
+      console.log('[DEBUG] Initial scroll after loading, messages:', messages.length);
       setTimeout(() => {
         if (messagesContainerRef.current) {
+          console.log('[DEBUG] Executing scroll, scrollHeight:', messagesContainerRef.current.scrollHeight);
           messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
         }
       }, 100);
