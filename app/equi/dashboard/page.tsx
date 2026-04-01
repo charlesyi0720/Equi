@@ -1380,22 +1380,34 @@ function DashboardContent() {
 
   // Scroll to bottom when messages change or load
   useEffect(() => {
-    if (messagesContainerRef.current && messages.length > 0) {
-      console.log('[DEBUG] Scrolling chat to bottom, messages:', messages.length);
-      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    const scrollToBottom = () => {
+      if (messagesContainerRef.current) {
+        console.log('[DEBUG] Scrolling chat, scrollHeight:', messagesContainerRef.current.scrollHeight);
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      } else {
+        console.log('[DEBUG] messagesContainerRef is null');
+      }
+    };
+
+    if (messages.length > 0) {
+      console.log('[DEBUG] Messages changed, count:', messages.length);
+      // Use requestAnimationFrame to ensure DOM is updated
+      requestAnimationFrame(() => {
+        requestAnimationFrame(scrollToBottom);
+      });
     }
   }, [messages]);
 
   // Initial scroll to bottom after loading completes
   useEffect(() => {
-    if (!isLoading && messages.length > 0 && messagesContainerRef.current) {
-      console.log('[DEBUG] Initial scroll after loading, messages:', messages.length);
+    if (!isLoading && messages.length > 0) {
+      console.log('[DEBUG] Loading complete, scrolling to bottom');
       setTimeout(() => {
         if (messagesContainerRef.current) {
-          console.log('[DEBUG] Executing scroll, scrollHeight:', messagesContainerRef.current.scrollHeight);
+          console.log('[DEBUG] Executing delayed scroll');
           messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
         }
-      }, 100);
+      }, 500);
     }
   }, [isLoading]);
 
