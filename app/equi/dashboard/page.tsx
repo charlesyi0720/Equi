@@ -1377,22 +1377,24 @@ function DashboardContent() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Scroll to bottom
+  // Scroll to bottom when messages change or load
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    if (messagesEndRef.current && messages.length > 0) {
+      // Use setTimeout to ensure DOM is updated
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
     }
   }, [messages]);
 
-  // Initial scroll to bottom on mount
+  // Initial scroll to bottom after loading completes
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (messagesEndRef.current) {
-        messagesEndRef.current.scrollIntoView({ behavior: "auto" });
-      }
-    }, 100);
-    return () => clearTimeout(timer);
-  }, []);
+    if (!isLoading && messages.length > 0 && messagesEndRef.current) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+      }, 200);
+    }
+  }, [isLoading, messages.length]);
 
   // Keep snapshot ref in sync so async persistSession reads fresh messages.
   useEffect(() => {
