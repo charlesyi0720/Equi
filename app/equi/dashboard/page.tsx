@@ -1384,6 +1384,16 @@ function DashboardContent() {
     }
   }, [messages]);
 
+  // Initial scroll to bottom on mount
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: "auto" });
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Keep snapshot ref in sync so async persistSession reads fresh messages.
   useEffect(() => {
     messagesSnapshotRef.current = messages;
@@ -1808,9 +1818,9 @@ function DashboardContent() {
   useEffect(() => {
     // Scroll to 8:30 AM after loading completes
     if (!isLoading && calendarScrollRef.current) {
-      // Delay 50ms to wait for browser CSS Grid rendering
+      // Scroll to 8am (8 hours * 60px per hour = 480px)
       const timer = setTimeout(() => {
-        calendarScrollRef.current!.scrollTop = 500;
+        calendarScrollRef.current!.scrollTop = 480;
       }, 50);
       return () => clearTimeout(timer);
     }
