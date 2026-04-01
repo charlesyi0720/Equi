@@ -1692,17 +1692,38 @@ function DashboardContent() {
           activityLabelHints
         );
         console.log('[DEBUG] schedules to persist:', schedules.length, schedules);
-        for (let i = 0; i < schedules.length; i++) {
-          const s = schedules[i];
-          console.log('[DEBUG] Persisting schedule', i, ':', s);
-          await persistAgentEvent({
+
+        if (schedules.length > 0) {
+          // Batch add all schedules at once to avoid state race condition
+          const newEvents = schedules.map((s, i) => ({
             id: `auto-${assistantMessage.id}-${Date.now()}-${i}`,
             title: s.title,
             dayIdx: s.dayIdx,
             start: s.start,
             end: s.end,
             isoDate: s.isoDate,
-          });
+            createdAt: new Date().toISOString(),
+          }));
+
+          setAgentCalendarEvents((prev) => [...prev, ...newEvents]);
+
+          if (userData && supabase) {
+            const merged: EquiUser = {
+              ...userData,
+              calendarAgentEvents: [...(userData.calendarAgentEvents ?? []), ...newEvents],
+            };
+            setUserData(merged);
+
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+            if (token) {
+              await fetch("/api/profile", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ user_data: merged }),
+              });
+            }
+          }
         }
       }
     } catch (error) {
@@ -2046,17 +2067,38 @@ function DashboardContent() {
           activityLabelHints
         );
         console.log('[DEBUG] schedules to persist:', schedules.length, schedules);
-        for (let i = 0; i < schedules.length; i++) {
-          const s = schedules[i];
-          console.log('[DEBUG] Persisting schedule', i, ':', s);
-          await persistAgentEvent({
+
+        if (schedules.length > 0) {
+          // Batch add all schedules at once to avoid state race condition
+          const newEvents = schedules.map((s, i) => ({
             id: `auto-${assistantMessage.id}-${Date.now()}-${i}`,
             title: s.title,
             dayIdx: s.dayIdx,
             start: s.start,
             end: s.end,
             isoDate: s.isoDate,
-          });
+            createdAt: new Date().toISOString(),
+          }));
+
+          setAgentCalendarEvents((prev) => [...prev, ...newEvents]);
+
+          if (userData && supabase) {
+            const merged: EquiUser = {
+              ...userData,
+              calendarAgentEvents: [...(userData.calendarAgentEvents ?? []), ...newEvents],
+            };
+            setUserData(merged);
+
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+            if (token) {
+              await fetch("/api/profile", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ user_data: merged }),
+              });
+            }
+          }
         }
       }
     } catch (error: any) {
