@@ -1330,6 +1330,11 @@ function DashboardContent() {
           const msgs = await loadSessionMessages(activeId, prevSession?.messages);
           if (msgs.length > 0) {
             setMessages(msgs);
+            // Scroll to bottom after messages load
+            setTimeout(() => {
+              const el = document.querySelector('[data-messages-end]');
+              el?.scrollIntoView({ behavior: "auto" });
+            }, 300);
           }
         }
         setIsLoading(false);
@@ -2419,7 +2424,7 @@ function DashboardContent() {
                     </div>
                     );
                   })}
-                  <div ref={messagesEndRef} />
+                  <div ref={messagesEndRef} data-messages-end />
                 </div>
               </div>
 
