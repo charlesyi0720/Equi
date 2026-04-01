@@ -2291,16 +2291,36 @@ function DashboardContent() {
                                 console.warn("[calendar] title API failed, using heuristic titles", e);
                               }
                               const t0 = Date.now();
-                              list.forEach((parsed, i) => {
-                                persistAgentEvent({
-                                  id: `dynamic-${t0}-${i}`,
-                                  title: titles[i] ?? parsed.title,
-                                  dayIdx: parsed.dayIdx,
-                                  start: parsed.start,
-                                  end: parsed.end,
-                                  isoDate: parsed.isoDate,
-                                });
-                              });
+                              const newEvents = list.map((parsed, i) => ({
+                                id: `dynamic-${t0}-${i}`,
+                                title: titles[i] ?? parsed.title,
+                                dayIdx: parsed.dayIdx,
+                                start: parsed.start,
+                                end: parsed.end,
+                                isoDate: parsed.isoDate,
+                                createdAt: new Date().toISOString(),
+                              }));
+
+                              // Batch add all events at once
+                              setAgentCalendarEvents((prev) => [...prev, ...newEvents]);
+
+                              if (userData && supabase) {
+                                const merged: EquiUser = {
+                                  ...userData,
+                                  calendarAgentEvents: [...(userData.calendarAgentEvents ?? []), ...newEvents],
+                                };
+                                setUserData(merged);
+
+                                const { data: { session } } = await supabase.auth.getSession();
+                                const token = session?.access_token;
+                                if (token) {
+                                  await fetch("/api/profile", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                                    body: JSON.stringify({ user_data: merged }),
+                                  });
+                                }
+                              }
                               const toast = document.createElement("div");
                               toast.textContent = "Schedule updated!";
                               toast.className =
