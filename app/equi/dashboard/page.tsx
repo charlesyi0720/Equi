@@ -1382,15 +1382,11 @@ function DashboardContent() {
   useEffect(() => {
     const scrollToBottom = () => {
       if (messagesContainerRef.current) {
-        console.log('[DEBUG] Scrolling chat, scrollHeight:', messagesContainerRef.current.scrollHeight);
         messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-      } else {
-        console.log('[DEBUG] messagesContainerRef is null');
       }
     };
 
     if (messages.length > 0) {
-      console.log('[DEBUG] Messages changed, count:', messages.length);
       // Use requestAnimationFrame to ensure DOM is updated
       requestAnimationFrame(() => {
         requestAnimationFrame(scrollToBottom);
@@ -1398,18 +1394,16 @@ function DashboardContent() {
     }
   }, [messages]);
 
-  // Initial scroll to bottom after loading completes
+  // Initial scroll to bottom after loading completes (also fires when resume dialog is dismissed)
   useEffect(() => {
-    if (!isLoading && messages.length > 0) {
-      console.log('[DEBUG] Loading complete, scrolling to bottom');
+    if (!isLoading && !showResumeDialog && messages.length > 0) {
       setTimeout(() => {
         if (messagesContainerRef.current) {
-          console.log('[DEBUG] Executing delayed scroll');
           messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
         }
       }, 500);
     }
-  }, [isLoading]);
+  }, [isLoading, showResumeDialog]);
 
   // Keep snapshot ref in sync so async persistSession reads fresh messages.
   useEffect(() => {
@@ -1833,15 +1827,14 @@ function DashboardContent() {
 
   // Auto-scroll to current time on mount - must be BEFORE early returns
   useEffect(() => {
-    // Scroll to 8:30 AM after loading completes
-    if (!isLoading && calendarScrollRef.current) {
-      // Scroll to 8am (8 hours * 60px per hour = 480px)
+    // Scroll to 8am (8 hours * 96px per hour = 768px), also fires when resume dialog is dismissed
+    if (!isLoading && !showResumeDialog && calendarScrollRef.current) {
       const timer = setTimeout(() => {
-        calendarScrollRef.current!.scrollTop = 480;
+        calendarScrollRef.current!.scrollTop = 768;
       }, 50);
       return () => clearTimeout(timer);
     }
-  }, [isLoading]);
+  }, [isLoading, showResumeDialog]);
 
   useEffect(() => {
     if (!calendarDetail) return;
