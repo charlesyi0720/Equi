@@ -1106,12 +1106,14 @@ function DashboardContent() {
   // Delete an agent event by id from all state + Supabase.
   // ---------------------------------------------------------------------------
   const deleteAgentEvent = async (eventId: string) => {
-    setAgentCalendarEvents((prev) => prev.filter((e) => e.id !== eventId));
+    // Handle composite IDs (e.g. "abc~def") created when similar events are merged for display.
+    const ids = eventId.split("~");
+    setAgentCalendarEvents((prev) => prev.filter((e) => !ids.includes(e.id)));
     setCalendarDetail(null);
     if (!userData) return;
     const updated: EquiUser = {
       ...userData,
-      calendarAgentEvents: (userData.calendarAgentEvents ?? []).filter((e) => e.id !== eventId),
+      calendarAgentEvents: (userData.calendarAgentEvents ?? []).filter((e) => !ids.includes(e.id)),
     };
     setUserData(updated);
     if (!supabase) return;
@@ -2153,6 +2155,8 @@ function DashboardContent() {
     const byDay: Map<number, CalendarGridEvent[]> = new Map();
     for (const ev of uniqueVisualEvents) {
       if (!Number.isFinite(ev.dayIdx)) continue;
+      // Exclude one-off events that won't be shown this week (they'd cause phantom overlaps).
+      if (ev.isoDate && ev.isoDate !== columnIsoDates[ev.dayIdx]) continue;
       const list = byDay.get(ev.dayIdx) ?? [];
       list.push(ev);
       byDay.set(ev.dayIdx, list);
@@ -2493,14 +2497,6 @@ function DashboardContent() {
                   <div className="mt-1 text-xs text-slate-400 font-medium">{weekRangeLabel} &middot; 12 AM&ndash;11 PM</div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <button
-                    onClick={handleAutoHeal}
-                    disabled={isHealing}
-                    className="flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 text-xs font-semibold transition-colors cursor-pointer"
-                  >
-                    <LifebuoyIcon />
-                    {isHealing ? "Rescheduling..." : "Liquid Schedule"}
-                  </button>
                   <div className="flex items-center gap-5 text-xs text-slate-500 font-medium">
                     <div className="flex items-center gap-2">
                       <span className="inline-block h-3 w-3 rounded border border-emerald-200 bg-emerald-50/70" />
